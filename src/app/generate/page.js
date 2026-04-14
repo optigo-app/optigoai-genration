@@ -6,16 +6,17 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
-import PromptInput from '../components/PromptInput';
-import GenerateSettingsPanel from '../components/generate/GenerateSettingsPanel';
-import GeneratedImageGroup from '../components/generate/GeneratedImageGroup';
-import ModeToggle from '../components/generate/ModeToggle';
-import SelectionBar from '../components/generate/SelectionBar';
-import CollectionsModal from '../components/generate/CollectionsModal';
-import DesignCollectionPanel from '../components/generate/DesignCollectionPanel';
-import ModelSelectPanel, { IMAGE_MODELS, VIDEO_MODELS } from '../components/generate/ModelSelectPanel';
-import { COLORS } from '../theme/tokens';
+import Sidebar from '@/components/Sidebar';
+import PromptInput from '@/components/PromptInput';
+import GenerateSettingsPanel from '@/components/generate/GenerateSettingsPanel';
+import GeneratedImageGroup from '@/components/generate/GeneratedImageGroup';
+import ModeToggle from '@/components/generate/ModeToggle';
+import SelectionBar from '@/components/generate/SelectionBar';
+import CollectionsModal from '@/components/generate/CollectionsModal';
+import DesignCollectionPanel from '@/components/generate/DesignCollectionPanel';
+import ModelSelectPanel, { IMAGE_MODELS, VIDEO_MODELS } from '@/components/generate/ModelSelectPanel';
+import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
+import { fileFromImageUrl, processSketchImage, processImageDynamicPrompt } from '@/utils/processServices';
 import { IconButton, Tooltip } from '@mui/material';
 
 const SAMPLE_HISTORY = [
@@ -67,7 +68,7 @@ export default function GeneratePage() {
       const savedImages = sessionStorage.getItem('home_images');
       if (savedPrompt) setPrompt(savedPrompt);
       if (savedImages) {
-        try { setUploadedImages(JSON.parse(savedImages)); } catch {}
+        try { setUploadedImages(JSON.parse(savedImages)); } catch { }
       }
       sessionStorage.removeItem('home_prompt');
       sessionStorage.removeItem('home_images');
@@ -93,21 +94,17 @@ export default function GeneratePage() {
   const [collectionsModalOpen, setCollectionsModalOpen] = useState(false);
   const [designPanelOpen, setDesignPanelOpen] = useState(false);
   const [modelPanelOpen, setModelPanelOpen] = useState(false);
-  const [collections, setCollections] = useState([
-    { id: 1, name: 'TEST COLLECTION', images: ['https://picsum.photos/seed/gen1/400/500'] },
-    { id: 2, name: 'Portraits',        images: ['https://picsum.photos/seed/gen2/400/500'] },
-    { id: 3, name: 'Logos',            images: [] },
-  ]);
+  const [collections, setCollections] = useState([]);
+  const canGenerate = mode === 'sketch' ? uploadedImages.length > 0 : Boolean(prompt.trim());
+  const uploadAccept = mode === 'video' ? 'image/*,video/*' : 'image/*';
 
   const handleToggleCollection = (colId, images) => {
     setCollections((prev) => prev.map((c) => {
       if (c.id !== colId) return c;
       const alreadyHas = images.some((img) => c.images.includes(img));
       if (alreadyHas) {
-        // remove selected images from collection
         return { ...c, images: c.images.filter((img) => !images.includes(img)) };
       } else {
-        // add selected images to collection (deduplicated)
         return { ...c, images: [...new Set([...c.images, ...images])] };
       }
     }));
@@ -150,8 +147,9 @@ export default function GeneratePage() {
   // Action configs per type
   const ACTION_CONFIG = {
     upscale: { prompt: 'Upscale this image to maximum resolution, enhance details and sharpness', mode: 'image' },
-    edit:    { prompt: 'Edit and enhance this image: ', mode: 'image' },
-    video:   { prompt: 'Animate this image into a smooth cinematic video', mode: 'video' },
+    image: { prompt: 'Generate a refined image variation based on this reference', mode: 'image' },
+    edit: { prompt: 'Edit and enhance this image: ', mode: 'image' },
+    video: { prompt: 'Animate this image into a smooth cinematic video', mode: 'video' },
   };
 
   const handleAction = (type, imgSrc) => {
@@ -175,26 +173,91 @@ export default function GeneratePage() {
     setTimeout(() => promptInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
   };
 
-  const handleGenerate = () => {
-    if (!prompt.trim() || isGenerating) return;
+  const handleGenerate = async () => {
+    if (!canGenerate || isGenerating) return;
+
+    if (mode === 'sketch' && uploadedImages.length === 0) {
+      alert('Please upload at least one image for sketch conversion.');
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratingPrompt(prompt);
-    setTimeout(() => {
-      const h = settings.dimension === '16:9' ? 225 : settings.dimension === '9:16' ? 711 : 400;
-      const seeds = Array.from({ length: settings.count }, (_, i) =>
-        `https://picsum.photos/seed/${Date.now() + i}/400/${h}`
-      );
-      setHistory((prev) => [{
-        id: Date.now(),
-        date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
-        prompt, images: seeds,
-        tags: [settings.preset?.toLowerCase(), mode, settings.dimension].filter(Boolean),
-        dimension: settings.dimension,
-      }, ...prev]);
-      setPrompt('');
-      setIsGenerating(false);
-      setGeneratingPrompt('');
-    }, 2200);
+
+    try {
+      if (mode === 'sketch') {
+        const sourceImage = uploadedImages[0];
+        const file = await fileFromImageUrl(sourceImage.url, sourceImage.name || 'sketch-source.png');
+        const result = await processSketchImage(file);
+        const sketchImageUrl = result.imageUrl || sourceImage.url;
+
+        setHistory((prev) => [{
+          id: Date.now(),
+          date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+          prompt,
+          images: [sketchImageUrl],
+          tags: ['sketch', settings.dimension],
+          dimension: settings.dimension,
+        }, ...prev]);
+
+        setPrompt('');
+        return;
+      }
+
+      if (mode === 'image' && uploadedImages.length > 0) {
+        const sourceImage = uploadedImages[0];
+        const file = await fileFromImageUrl(sourceImage.url, sourceImage.name || 'image-source.png');
+        const modelId = settings.imageModel || IMAGE_MODELS[0]?.id;
+
+        const result = await processImageDynamicPrompt({
+          file,
+          prompt,
+          modelId,
+        });
+
+        const generatedImageUrl = result.imageUrl || sourceImage.url;
+
+        setHistory((prev) => [{
+          id: Date.now(),
+          date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+          prompt,
+          images: [generatedImageUrl],
+          tags: [modelId, 'image', settings.dimension].filter(Boolean),
+          dimension: settings.dimension,
+        }, ...prev]);
+
+        setPrompt('');
+        return;
+      }
+
+      setTimeout(() => {
+        const h = settings.dimension === '16:9' ? 225 : settings.dimension === '9:16' ? 711 : 400;
+        const seeds = Array.from({ length: settings.count }, (_, i) =>
+          `https://picsum.photos/seed/${Date.now() + i}/400/${h}`
+        );
+        setHistory((prev) => [{
+          id: Date.now(),
+          date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+          prompt, images: seeds,
+          tags: [settings.preset?.toLowerCase(), mode, settings.dimension].filter(Boolean),
+          dimension: settings.dimension,
+        }, ...prev]);
+        setPrompt('');
+      }, 2200);
+    } catch (error) {
+      console.error('Sketch generation failed:', error);
+      alert(error?.message || 'Sketch conversion failed. Please try again.');
+    } finally {
+      if (mode === 'sketch') {
+        setIsGenerating(false);
+        setGeneratingPrompt('');
+      } else {
+        setTimeout(() => {
+          setIsGenerating(false);
+          setGeneratingPrompt('');
+        }, 2200);
+      }
+    }
   };
 
   return (
@@ -210,10 +273,8 @@ export default function GeneratePage() {
             flexShrink: 0,
             height: PANEL_HEIGHT,
             bgcolor: 'background.paper',
-            borderRadius: '16px',
-            border: '1px solid',
-            borderColor: 'divider',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
+            borderRadius: RADIUS.lg,
+            boxShadow: SHADOWS.sidebar,
             display: 'flex',
             flexDirection: 'row',
             overflow: 'hidden',
@@ -223,33 +284,36 @@ export default function GeneratePage() {
           {/* Settings column */}
           <Box sx={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* Left header */}
-          <Box sx={{ px: 2, pt: 2, pb: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Settings
-            </Typography>
-            <Tooltip title="Design Collection" placement="right" arrow>
-              <IconButton
-                size="small"
-                onClick={() => { setDesignPanelOpen((v) => !v); setModelPanelOpen(false); }}
-                sx={{
-                  color: designPanelOpen ? 'primary.main' : 'text.disabled',
-                  bgcolor: designPanelOpen ? COLORS.primaryAlpha[10] : 'transparent',
-                  border: '1px solid',
-                  borderColor: designPanelOpen ? COLORS.primaryAlpha[40] : 'transparent',
-                  borderRadius: '7px',
-                  p: 0.5,
-                  '&:hover': { color: 'primary.main', bgcolor: COLORS.primaryAlpha[10] },
-                }}
-              >
-                <Sparkles size={14} strokeWidth={1.8} />
-              </IconButton>
-            </Tooltip>
-          </Box>
+            <Box sx={{ px: 2, pt: 2, pb: 1.35, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography sx={{ fontSize: '0.76rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.09em' }}>
+                Settings
+              </Typography>
+              <Tooltip title="Design Collection" placement="right" arrow>
+                <motion.div whileHover={{ scale: 1.06, y: -1 }} whileTap={{ scale: 0.95 }}>
+                  <IconButton
+                    size="small"
+                    onClick={() => { setDesignPanelOpen((v) => !v); setModelPanelOpen(false); }}
+                    sx={{
+                      color: designPanelOpen ? 'primary.main' : 'text.secondary',
+                      bgcolor: designPanelOpen ? COLORS.primaryAlpha[12] : 'transparent',
+                      border: '1px solid',
+                      borderColor: designPanelOpen ? COLORS.primaryAlpha[40] : 'divider',
+                      borderRadius: '8px',
+                      p: 0.55,
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&:hover': { color: 'primary.main', bgcolor: COLORS.primaryAlpha[12], borderColor: COLORS.primaryAlpha[40] },
+                    }}
+                  >
+                    <Sparkles size={15} strokeWidth={1.9} />
+                  </IconButton>
+                </motion.div>
+              </Tooltip>
+            </Box>
 
-          {/* Settings panel fills rest */}
-          <Box sx={{ flex: 1, overflow: 'hidden' }}>
-            <GenerateSettingsPanel settings={settings} onChange={setSettings} mode={mode} onOpenModelPanel={() => { setModelPanelOpen(true); setDesignPanelOpen(false); }} />
-          </Box>
+            {/* Settings panel fills rest */}
+            <Box sx={{ flex: 1, overflow: 'hidden' }}>
+              <GenerateSettingsPanel settings={settings} onChange={setSettings} mode={mode} onOpenModelPanel={() => { setModelPanelOpen(true); setDesignPanelOpen(false); }} />
+            </Box>
           </Box>{/* end settings column */}
 
           {/* Design Collection Panel */}
@@ -275,10 +339,8 @@ export default function GeneratePage() {
             flex: 1,
             height: PANEL_HEIGHT,
             bgcolor: 'background.paper',
-            borderRadius: '16px',
-            border: '1px solid',
-            borderColor: 'divider',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
+            borderRadius: RADIUS.lg,
+            boxShadow: SHADOWS.sidebar,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -297,39 +359,16 @@ export default function GeneratePage() {
               gap: 1.25,
             }}
           >
-
-            {/* Action context badge */}
-            <AnimatePresence>
-              {uploadedImages.length > 0 && prompt && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
-                    {[
-                      { key: 'upscale', label: '⬆ Upscale', color: COLORS.cyan },
-                      { key: 'edit',    label: '✏ Edit',    color: COLORS.primary },
-                      { key: 'video',   label: '🎬 Video',  color: COLORS.pink },
-                    ].map(a => prompt.toLowerCase().includes(a.key) || (a.key === 'upscale' && prompt.includes('Upscale')) || (a.key === 'edit' && prompt.includes('Edit')) || (a.key === 'video' && prompt.includes('Animate')) ? (
-                      <Box key={a.key} sx={{ px: 1, py: 0.25, borderRadius: '6px', bgcolor: `${a.color}18`, border: `1px solid ${a.color}44` }}>
-                        <Typography sx={{ fontSize: '0.65rem', color: a.color, fontWeight: 600 }}>{a.label} mode active</Typography>
-                      </Box>
-                    ) : null)}
-                  </Box>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             {/* Prompt input — shared reusable component */}
             <PromptInput
               value={prompt}
               onChange={setPrompt}
               onGenerate={handleGenerate}
               isGenerating={isGenerating}
+              canGenerate={canGenerate}
               buttonLabel={isGenerating ? 'Generating...' : 'Generate'}
               uploadedImages={uploadedImages}
+              uploadAccept={uploadAccept}
               onImagesChange={setUploadedImages}
               inputRef={promptInputRef}
               radius="12px"
@@ -371,55 +410,55 @@ export default function GeneratePage() {
                 '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.08)', borderRadius: 2 },
               }}
             >
-            {/* Empty state */}
-            {history.length === 0 && !isGenerating && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: 2 }}>
-                  <motion.div animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 2.5, repeat: Infinity }}>
-                    <Sparkles size={52} strokeWidth={1} color={COLORS.primary} />
-                  </motion.div>
-                  <Typography sx={{ fontSize: '0.88rem', color: 'text.disabled', textAlign: 'center' }}>
-                    Your generated images will appear here
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled', opacity: 0.6 }}>
-                    Type a prompt and click Generate
-                  </Typography>
-                </Box>
-              </motion.div>
-            )}
-
-            {/* Generating skeleton */}
-            <AnimatePresence>
-              {isGenerating && (
-                <GeneratedImageGroup
-                  key="generating"
-                  date={new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-                  prompt={generatingPrompt}
-                  images={[]}
-                  tags={[]}
-                  isGenerating={true}
-                  count={settings.count}
-                  dimension={settings.dimension}
-                />
+              {/* Empty state */}
+              {history.length === 0 && !isGenerating && (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: 2 }}>
+                    <motion.div animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 2.5, repeat: Infinity }}>
+                      <Sparkles size={52} strokeWidth={1} color={COLORS.primary} />
+                    </motion.div>
+                    <Typography sx={{ fontSize: '0.88rem', color: 'text.disabled', textAlign: 'center' }}>
+                      Your generated images will appear here
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled', opacity: 0.6 }}>
+                      Type a prompt and click Generate
+                    </Typography>
+                  </Box>
+                </motion.div>
               )}
-            </AnimatePresence>
 
-            {/* History */}
-            <AnimatePresence>
-              {history.map((group) => (
-                <GeneratedImageGroup
-                  key={group.id}
-                  date={group.date}
-                  prompt={group.prompt}
-                  images={group.images}
-                  tags={group.tags}
-                  dimension={group.dimension}
-                  onAction={handleAction}
-                  selectedImages={selectedImages}
-                  onSelect={handleSelect}
-                />
-              ))}
-            </AnimatePresence>
+              {/* Generating skeleton */}
+              <AnimatePresence>
+                {isGenerating && (
+                  <GeneratedImageGroup
+                    key="generating"
+                    date={new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                    prompt={generatingPrompt}
+                    images={[]}
+                    tags={[]}
+                    isGenerating={true}
+                    count={settings.count}
+                    dimension={settings.dimension}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* History */}
+              <AnimatePresence>
+                {history.map((group) => (
+                  <GeneratedImageGroup
+                    key={group.id}
+                    date={group.date}
+                    prompt={group.prompt}
+                    images={group.images}
+                    tags={group.tags}
+                    dimension={group.dimension}
+                    onAction={handleAction}
+                    selectedImages={selectedImages}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </AnimatePresence>
             </Box>
 
             {/* Floating selection bar */}

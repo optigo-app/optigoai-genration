@@ -1,0 +1,42 @@
+[
+  {
+    "id": "chatgpt-v2",
+    "label": "Modal C v2",
+    "category": "ai-generation",
+    "enabled": true,
+    "supportsPrompts": true,
+    "type": "generator"
+  },
+  {
+    "id": "gemini-v2",
+    "label": "Modal G v2",
+    "category": "ai-generation",
+    "enabled": true,
+    "supportsPrompts": true,
+    "type": "generator"
+  },
+  {
+    "id": "qwen-v2",
+    "label": "Modal Q v2",
+    "category": "ai-generation",
+    "enabled": true,
+    "supportsPrompts": true,
+    "type": "generator"
+  },
+  {
+    "id": "nanobanana-v2",
+    "label": "Modal N v2",
+    "category": "ai-generation",
+    "enabled": true,
+    "supportsPrompts": true,
+    "type": "generator"
+  },
+  {
+    "id": "flux-v2",
+    "label": "Modal F v2",
+    "category": "ai-generation",
+    "enabled": true,
+    "supportsPrompts": true,
+    "type": "generator"
+  }
+]

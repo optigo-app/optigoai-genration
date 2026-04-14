@@ -1,8 +1,8 @@
 import Box from '@mui/material/Box';
-import Sidebar from './components/Sidebar';
-import HeroSection from './components/HeroSection';
-import FeaturedBlueprints from './components/FeaturedBlueprints';
-import CommunityCreations from './components/CommunityCreations';
+import Sidebar from '@/components/Sidebar';
+import HeroSection from '@/components/HeroSection';
+import FeaturedBlueprints from '@/components/FeaturedBlueprints';
+import CommunityCreations from '@/components/CommunityCreations';
 
 export default function Home() {
   return (

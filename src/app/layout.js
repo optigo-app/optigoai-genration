@@ -1,15 +1,22 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
-import ThemeRegistry from "./components/ThemeRegistry";
+import ThemeRegistry from "@/components/ThemeRegistry";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const poppins = Poppins({
+  weight: ["200", "300", "400", "500", "600", "700", "800", "900"],
+  style: ["normal", "italic"],
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-poppins",
+  fallback: [
+    "system-ui",
+    "-apple-system",
+    "BlinkMacSystemFont",
+    "Segoe UI",
+    "Roboto",
+    "Helvetica Neue",
+    "sans-serif",
+  ],
 });
 
 export const metadata = {
@@ -19,7 +26,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" className={poppins.variable}>
       <head>
         {/* Blocking script — runs before paint to prevent theme flash */}
         <script
@@ -27,10 +34,10 @@ export default function RootLayout({ children }) {
             __html: `
               (function() {
                 try {
-                  var mode = localStorage.getItem('theme-mode') || 'dark';
+                  var mode = localStorage.getItem('theme-mode') || 'light';
                   var bg = mode === 'light' ? '#f4f4f6' : '#0f0f0f';
-                  document.documentElement.style.backgroundColor = bg;
-                  document.documentElement.setAttribute('data-theme', mode);
+                  document.body.style.backgroundColor = bg;
+                  document.body.setAttribute('data-theme', mode);
                 } catch(e) {}
               })();
             `,

@@ -6,13 +6,12 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, LayoutGrid, Video, BookOpen, MoreVertical, FolderPlus, Check, X, FolderOpen } from 'lucide-react';
+import { Plus, LayoutGrid, Video, BookOpen, MoreVertical, FolderPlus, Check, X } from 'lucide-react';
 import { useTheme } from '@mui/material/styles';
-import Sidebar from '../components/Sidebar';
-import { COLORS, RADIUS } from '../theme/tokens';
+import Sidebar from '@/components/Sidebar';
+import { COLORS, RADIUS } from '@/theme/tokens';
 
 // ── Shared sample data ──────────────────────────────────────────────
 const ALL_GENERATIONS = [
