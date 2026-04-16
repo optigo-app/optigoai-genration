@@ -81,7 +81,7 @@ export default function HeroSection() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
-  const bgImage = 'url("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1400&q=80")';
+  const bgImage = 'url("https://t4.ftcdn.net/jpg/02/92/56/91/240_F_292569116_Phht4uRj1YIuLFgBhrLu8171npBOcJcr.jpg")';
 
   return (
     <Box
@@ -108,7 +108,7 @@ export default function HeroSection() {
           inset: 0,
           background: isDark
             ? 'linear-gradient(to bottom, rgba(10,6,20,0.58) 0%, rgba(10,6,20,0.8) 55%, rgba(15,15,15,0.94) 100%)'
-            : '#f4f4f6',
+            : 'linear-gradient(to bottom, rgba(244,244,246,0.7) 0%, rgba(244,244,246,0.85) 55%, rgba(255,255,255,0.95) 100%)',
           backdropFilter: 'blur(3px)',
           WebkitBackdropFilter: 'blur(3px)',
           zIndex: 0,

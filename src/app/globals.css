@@ -14,3 +14,29 @@ html {
 html[data-theme="light"] {
   background-color: #ffffff1a;
 }
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e5e7eb !important;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #82868b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #82868b;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #82868b #e5e7eb;
+}

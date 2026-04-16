@@ -14,23 +14,8 @@ import ImageLightbox from '@/components/ImageLightbox';
 import JewelryPromptBuilder from '@/components/PromptTemplates';
 import ImageGuidanceCard from '@/components/ImageGuidanceCard';
 import { COLORS, ANIM, RADIUS, SHADOWS, palette } from '@/theme/tokens';
+import { useConfirmation } from '@/hooks/useConfirmation';
 
-
-/**
- * Shared prompt input used on both home page and generate page.
-*
- * Props:
- *   value          – controlled prompt string
- *   onChange       – (string) => void
- *   onGenerate     – () => void  called when Generate clicked / Enter pressed
- *   isGenerating   – bool  shows spinner in button
- *   buttonLabel    – string  default "Generate"
- *   placeholder    – string
- *   uploadedImages – array of { id, url, name }
- *   onImagesChange – (images[]) => void
- *   inputRef       – optional ref forwarded to the outer wrapper
- *   radius         – border-radius string, default '14px'
- */
 export default function PromptInput({
   value = '',
   onChange,
@@ -44,17 +29,28 @@ export default function PromptInput({
   onImagesChange,
   inputRef,
   radius = '14px',
+  mode = 'image',
+  imageUploadMode = 'single',
+  onImageUploadModeChange,
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [promptBuilderOpen, setPromptBuilderOpen] = useState(false);
   const [guidanceAnchorEl, setGuidanceAnchorEl] = useState(null);
+  const [uploadSlotIndex, setUploadSlotIndex] = useState(null);
+  const [draftValue, setDraftValue] = useState(value);
   const fileInputRef = useRef(null);
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const p = palette(isDark);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const isGenerateEnabled = typeof canGenerate === 'boolean' ? canGenerate : Boolean(value.trim());
+  const isGenerateEnabled = typeof canGenerate === 'boolean' ? canGenerate : Boolean(draftValue.trim());
+  const shouldStackActions = draftValue.trim().length > 90;
+  const { confirm, ConfirmationComponent } = useConfirmation();
+
+  useEffect(() => {
+    setDraftValue(value);
+  }, [value]);
 
   const placeholderSuggestions = useMemo(() => {
     const suggestions = [
@@ -67,14 +63,14 @@ export default function PromptInput({
   }, [placeholder]);
 
   useEffect(() => {
-    if (value.trim() || placeholderSuggestions.length < 2) return;
+    if (draftValue.trim() || placeholderSuggestions.length < 2) return;
 
     const timer = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % placeholderSuggestions.length);
     }, 2400);
 
     return () => clearInterval(timer);
-  }, [value, placeholderSuggestions]);
+  }, [draftValue, placeholderSuggestions]);
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files || []);
@@ -83,7 +79,15 @@ export default function PromptInput({
       url: URL.createObjectURL(f),
       name: f.name,
     }));
-    onImagesChange?.([...uploadedImages, ...newImgs]);
+
+    if (uploadSlotIndex !== null && uploadSlotIndex >= 0) {
+      const updated = [...uploadedImages];
+      updated[uploadSlotIndex] = newImgs[0];
+      onImagesChange?.(updated);
+      setUploadSlotIndex(null);
+    } else {
+      onImagesChange?.([...uploadedImages, ...newImgs]);
+    }
     e.target.value = '';
   };
 
@@ -99,16 +103,107 @@ export default function PromptInput({
     setGuidanceAnchorEl(null);
   };
 
-  const openSelectMediaDialog = () => {
-    closeImageGuidance();
+  const openSelectMediaDialog = (slotIndex = null) => {
+    setUploadSlotIndex(slotIndex);
     setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
+  const handleContinue = () => {
+    closeImageGuidance();
+  };
+
   const handlePromptApply = (prompt) => {
+    setDraftValue(prompt);
     onChange?.(prompt);
   };
 
-  const innerRadius = `calc(${radius} - 1.5px)`;
+  const handleGenerateClick = () => {
+    if (!isGenerateEnabled || isGenerating) return;
+    onChange?.(draftValue);
+    onGenerate?.(draftValue);
+  };
+
+  const actionIconSx = {
+    flexShrink: 0,
+    width: 35,
+    height: 35,
+    borderRadius: RADIUS.lg,
+  };
+
+  const templateIconSx = {
+    ...actionIconSx,
+    color: COLORS.primary,
+    border: '1px solid',
+    borderColor: COLORS.primaryAlpha[30],
+    bgcolor: COLORS.primaryAlpha[10],
+    '&:hover': { bgcolor: COLORS.primaryAlpha[18], borderColor: COLORS.primaryAlpha[40] },
+  };
+
+  const getUploadIconSx = ({ active = false, alignWithImages = false } = {}) => ({
+    ...actionIconSx,
+    color: active ? COLORS.primary : p.uploadIcon,
+    border: '1px solid',
+    borderColor: active ? COLORS.primaryAlpha[35] : p.borderMid,
+    bgcolor: active
+      ? COLORS.primaryAlpha[10]
+      : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(17, 24, 39, 0.03)'),
+    ...(alignWithImages ? { alignSelf: 'flex-start', mt: 0.25 } : {}),
+    '&:hover': {
+      color: COLORS.primary,
+      borderColor: COLORS.primaryAlpha[40],
+      bgcolor: COLORS.primaryAlpha[10],
+    },
+  });
+
+  const generateButtonSx = {
+    background: COLORS.gradientPrimary,
+    color: '#fff', fontWeight: 700, fontSize: '0.82rem',
+    px: 2.5, py: 0.9, borderRadius: RADIUS.sm, whiteSpace: 'nowrap', flexShrink: 0,
+    boxShadow: SHADOWS.buttonGlow,
+    '&:hover': { background: COLORS.gradientDeep, boxShadow: SHADOWS.buttonGlowHover },
+    '&.Mui-disabled': { background: COLORS.primaryAlpha[18], color: p.textDisabled, boxShadow: 'none' },
+  };
+
+  const renderTemplateButton = () => (
+    <Tooltip title="Prompt templates" placement="top">
+      <IconButton
+        size="small"
+        onClick={() => setPromptBuilderOpen(true)}
+        sx={templateIconSx}
+      >
+        <Sparkles size={17} strokeWidth={1.8} />
+      </IconButton>
+    </Tooltip>
+  );
+
+  const renderUploadButton = ({ active = false, alignWithImages = false } = {}) => (
+    <Tooltip title="Upload reference media" placement="top">
+      <IconButton
+        size="small"
+        onClick={openImageGuidance}
+        sx={getUploadIconSx({ active, alignWithImages })}
+      >
+        <ImagePlus size={17} strokeWidth={1.8} />
+      </IconButton>
+    </Tooltip>
+  );
+
+  const renderGenerateButton = () => (
+    <Button
+      variant="contained"
+      disabled={!isGenerateEnabled || isGenerating}
+      onClick={handleGenerateClick}
+      size="small"
+      startIcon={
+        isGenerating
+          ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
+          : <Zap size={14} />
+      }
+      sx={generateButtonSx}
+    >
+      {isGenerating ? 'Generating...' : buttonLabel}
+    </Button>
+  );
 
   return (
     <>
@@ -116,7 +211,7 @@ export default function PromptInput({
         ref={inputRef}
         sx={{
           position: 'relative',
-          borderRadius: radius,
+          borderRadius: RADIUS.lg,
           boxShadow: isDark
             ? '0 16px 34px rgba(0, 0, 0, 0.42)'
             : '0 10px 26px rgba(31, 41, 55, 0.12)',
@@ -127,7 +222,7 @@ export default function PromptInput({
           sx={{
             position: 'absolute',
             inset: 0,
-            borderRadius: radius,
+            borderRadius: RADIUS.lg,
             border: '1px solid',
             borderColor: isDark ? COLORS.primaryAlpha[35] : 'rgba(115, 103, 240, 0.22)',
             boxShadow: isDark
@@ -174,31 +269,22 @@ export default function PromptInput({
           border: '1px solid',
           borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17, 24, 39, 0.08)',
           backdropFilter: 'blur(16px)',
-          borderRadius: innerRadius,
+          borderRadius: RADIUS.lg,
           overflow: 'hidden',
         }}>
           {/* Input row */}
           <Box sx={{ display: 'flex', alignItems: uploadedImages.length > 0 ? 'flex-start' : 'center', px: 1.5, py: 1, gap: 1, minHeight: 58 }}>
-            <Tooltip title="Upload reference media" placement="top">
-              <IconButton
-                size="small"
-                onClick={openImageGuidance}
-                sx={{
-                  color: uploadedImages.length > 0 ? COLORS.primary : p.uploadIcon,
-                  flexShrink: 0,
-                  alignSelf: uploadedImages.length > 0 ? 'flex-start' : 'center',
-                  mt: uploadedImages.length > 0 ? 0.25 : 0,
-                  '&:hover': { color: COLORS.primary },
-                }}
-              >
-                <ImagePlus size={18} strokeWidth={1.6} />
-              </IconButton>
-            </Tooltip>
+            {!(uploadedImages.length === 0 && shouldStackActions) && (
+              renderUploadButton({
+                active: uploadedImages.length > 0,
+                alignWithImages: uploadedImages.length > 0,
+              })
+            )}
             <input ref={fileInputRef} type="file" accept={uploadAccept} multiple style={{ display: 'none' }} onChange={handleFileChange} />
 
             <Box sx={{ position: 'relative', flex: 1, minHeight: 24, display: 'flex', alignItems: 'center', pt: 0.4 }}>
               <AnimatePresence mode="wait" initial={false}>
-                {!value.trim() && (
+                {!draftValue.trim() && (
                   <motion.span
                     key={placeholderSuggestions[placeholderIndex]}
                     initial={{ opacity: 0, y: 6 }}
@@ -223,8 +309,8 @@ export default function PromptInput({
               </AnimatePresence>
 
               <InputBase
-                value={value}
-                onChange={(e) => onChange?.(e.target.value)}
+                value={draftValue}
+                onChange={(e) => setDraftValue(e.target.value)}
                 placeholder=""
                 fullWidth
                 multiline
@@ -232,6 +318,8 @@ export default function PromptInput({
                 sx={{
                   color: p.text,
                   fontSize: '0.9rem',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(148, 163, 184, 0.55) rgba(148, 163, 184, 0.14)',
                   '& textarea': {
                     position: 'relative',
                     zIndex: 1,
@@ -239,60 +327,60 @@ export default function PromptInput({
                     overflowWrap: 'anywhere',
                     wordBreak: 'break-word',
                     lineHeight: 1.45,
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: 'rgba(148, 163, 184, 0.55) rgba(148, 163, 184, 0.14)',
+                  },
+                  '& textarea::-webkit-scrollbar': { width: 7 },
+                  '& textarea::-webkit-scrollbar-track': {
+                    backgroundColor: 'rgba(148, 163, 184, 0.14)',
+                    borderRadius: 8,
+                  },
+                  '& textarea::-webkit-scrollbar-thumb': {
+                    backgroundColor: 'rgba(148, 163, 184, 0.55)',
+                    borderRadius: 8,
+                  },
+                  '& textarea::-webkit-scrollbar-thumb:hover': {
+                    backgroundColor: 'rgba(148, 163, 184, 0.75)',
                   },
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && isGenerateEnabled && !isGenerating) {
-                    onGenerate?.();
+                    handleGenerateClick();
                   }
                 }}
               />
-              {/* Action buttons - shown inline when no images */}
-              {uploadedImages.length === 0 && (
+              {/* Action buttons - shown inline when no images and prompt is short */}
+              {uploadedImages.length === 0 && !shouldStackActions && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 1 }}>
-                  <Tooltip title="Prompt templates" placement="top">
-                    <IconButton
-                      size="small"
-                      onClick={() => setPromptBuilderOpen(true)}
-                      sx={{
-                        color: COLORS.primary,
-                        border: '1px solid',
-                        borderColor: COLORS.primaryAlpha[30],
-                        bgcolor: COLORS.primaryAlpha[10],
-                        flexShrink: 0,
-                        '&:hover': { bgcolor: COLORS.primaryAlpha[18], borderColor: COLORS.primaryAlpha[40] },
-                      }}
-                    >
-                      <Sparkles size={15} strokeWidth={1.8} />
-                    </IconButton>
-                  </Tooltip>
-
-                  <Button
-                    variant="contained"
-                    disabled={!isGenerateEnabled || isGenerating}
-                    onClick={onGenerate}
-                    size="small"
-                    startIcon={
-                      isGenerating
-                        ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
-                        : <Zap size={14} />
-                    }
-                    sx={{
-                      background: COLORS.gradientPrimary,
-                      color: '#fff', fontWeight: 700, fontSize: '0.82rem',
-                      px: 2.5, py: 0.9, borderRadius: RADIUS.sm, whiteSpace: 'nowrap', flexShrink: 0,
-                      boxShadow: SHADOWS.buttonGlow,
-                      '&:hover': { background: COLORS.gradientDeep, boxShadow: SHADOWS.buttonGlowHover },
-                      '&.Mui-disabled': { background: COLORS.primaryAlpha[18], color: p.textDisabled, boxShadow: 'none' },
-                    }}
-                  >
-                    {isGenerating ? 'Generating...' : buttonLabel}
-                  </Button>
+                  {renderTemplateButton()}
+                  {renderGenerateButton()}
                 </Box>
               )}
             </Box>
 
           </Box>
+
+          {/* Bottom row for long prompt (no uploaded images) */}
+          {uploadedImages.length === 0 && shouldStackActions && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 0.75,
+                px: 1.5,
+                pb: 1,
+                pt: 0.25,
+              }}
+            >
+              {renderUploadButton()}
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                {renderTemplateButton()}
+                {renderGenerateButton()}
+              </Box>
+            </Box>
+          )}
 
           {/* Bottom row - only shown when there are uploaded images */}
           {uploadedImages.length > 0 && (
@@ -346,7 +434,7 @@ export default function PromptInput({
 
                 {uploadedImages.length > 1 && (
                   <Box
-                    onClick={() => onImagesChange?.([])}
+                    onClick={() => confirm('clearAllUploads', () => onImagesChange?.([]))}
                     sx={{ px: 0.75, py: 0.25, borderRadius: RADIUS.xs, border: '1px dashed', borderColor: p.borderMid, cursor: 'pointer', color: 'text.disabled', fontSize: '0.62rem', '&:hover': { color: COLORS.primary, borderColor: COLORS.primary } }}
                   >
                     Clear all
@@ -355,44 +443,8 @@ export default function PromptInput({
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-                <Tooltip title="Prompt templates" placement="top">
-                  <IconButton
-                    size="small"
-                    onClick={() => setPromptBuilderOpen(true)}
-                    sx={{
-                      color: COLORS.primary,
-                      border: '1px solid',
-                      borderColor: COLORS.primaryAlpha[30],
-                      bgcolor: COLORS.primaryAlpha[10],
-                      flexShrink: 0,
-                      '&:hover': { bgcolor: COLORS.primaryAlpha[18], borderColor: COLORS.primaryAlpha[40] },
-                    }}
-                  >
-                    <Sparkles size={15} strokeWidth={1.8} />
-                  </IconButton>
-                </Tooltip>
-
-                <Button
-                  variant="contained"
-                  disabled={!isGenerateEnabled || isGenerating}
-                  onClick={onGenerate}
-                  size="small"
-                  startIcon={
-                    isGenerating
-                      ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
-                      : <Zap size={14} />
-                  }
-                  sx={{
-                    background: COLORS.gradientPrimary,
-                    color: '#fff', fontWeight: 700, fontSize: '0.82rem',
-                    px: 2.5, py: 0.9, borderRadius: RADIUS.sm, whiteSpace: 'nowrap', flexShrink: 0,
-                    boxShadow: SHADOWS.buttonGlow,
-                    '&:hover': { background: COLORS.gradientDeep, boxShadow: SHADOWS.buttonGlowHover },
-                    '&.Mui-disabled': { background: COLORS.primaryAlpha[18], color: p.textDisabled, boxShadow: 'none' },
-                  }}
-                >
-                  {isGenerating ? 'Generating...' : buttonLabel}
-                </Button>
+                {renderTemplateButton()}
+                {renderGenerateButton()}
               </Box>
             </Box>
           )}
@@ -424,9 +476,13 @@ export default function PromptInput({
         }}
       >
         <ImageGuidanceCard
-          guidanceType={uploadAccept.includes('video') ? 'video' : 'image'}
+          guidanceType={mode}
+          uploadedMedia={uploadedImages}
           onClose={closeImageGuidance}
           onOpenSelectMedia={openSelectMediaDialog}
+          onContinue={handleContinue}
+          imageUploadMode={imageUploadMode}
+          onImageUploadModeChange={onImageUploadModeChange}
         />
       </Popover>
 
@@ -439,6 +495,7 @@ export default function PromptInput({
         onRemove={removeImage}
         onAddMore={() => { setLightboxOpen(false); setTimeout(() => fileInputRef.current?.click(), 100); }}
       />
+      <ConfirmationComponent />
     </>
   );
 }

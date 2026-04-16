@@ -1,15 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import { motion } from 'framer-motion';
 import {
-  Check, Share2, Download, ShieldCheck,
+  Check, Share2, Download,
   Expand, Wand2, Video, ImagePlus, MoreHorizontal
 } from 'lucide-react';
 import { COLORS, SHADOWS } from '@/theme/tokens';
+
+function isVideoSource(src = '') {
+  return /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i.test(src) || src.includes('/videos/');
+}
+
+async function downloadMedia(src, isVideo) {
+  const extensionMatch = src.match(/\.([a-zA-Z0-9]+)(?:$|[?#])/);
+  const extension = extensionMatch?.[1] || (isVideo ? 'mp4' : 'jpg');
+  const filename = `generated-${Date.now()}.${extension}`;
+
+  try {
+    const response = await fetch(src);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    const anchor = document.createElement('a');
+    anchor.href = src;
+    anchor.download = filename;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+}
 
 // Shimmer skeleton shown while generating
 export function GeneratingCard({ index = 0, aspectRatio = '1/1' }) {
@@ -86,8 +118,25 @@ function HoverBtn({ title, onClick, children, variant = 'default' }) {
   );
 }
 
-export default function GeneratedImageCard({ src, alt, index = 0, onAction, selected = false, onSelect }) {
+export default function GeneratedImageCard({ src, alt, index = 0, onAction, selected = false, onSelect, onPreview, prompt = '' }) {
   const [hovered, setHovered] = useState(false);
+  const isVideo = isVideoSource(src);
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (!isVideo || !videoRef.current) return;
+
+    if (hovered) {
+      videoRef.current.currentTime = 0;
+      const playPromise = videoRef.current.play();
+      if (playPromise?.catch) {
+        playPromise.catch(() => {});
+      }
+      return;
+    }
+
+    videoRef.current.pause();
+  }, [hovered, isVideo]);
 
   return (
     <motion.div
@@ -96,6 +145,7 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
       transition={{ duration: 0.45, delay: index * 0.08, ease: [0.23, 1, 0.32, 1] }}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
+      onClick={() => onPreview?.(index)}
       style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}
     >
       <Box
@@ -109,18 +159,35 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
           boxShadow: hovered ? SHADOWS.cardGlow : 'none',
         }}
       >
-        {/* Image */}
-        <Box
-          component="img"
-          src={src}
-          alt={alt || 'Generated image'}
-          sx={{
-            width: '100%',
-            display: 'block',
-            transition: 'transform 0.4s ease',
-            transform: hovered ? 'scale(1.04)' : 'scale(1)',
-          }}
-        />
+        {isVideo ? (
+          <Box
+            component="video"
+            ref={videoRef}
+            src={src}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            sx={{
+              width: '100%',
+              display: 'block',
+              aspectRatio: '16/9',
+              objectFit: 'cover',
+            }}
+          />
+        ) : (
+          <Box
+            component="img"
+            src={src}
+            alt={alt || 'Generated image'}
+            sx={{
+              width: '100%',
+              display: 'block',
+              transition: 'transform 0.4s ease',
+              transform: hovered ? 'scale(1.04)' : 'scale(1)',
+            }}
+          />
+        )}
 
         {/* Dark overlay on hover */}
         <motion.div
@@ -144,17 +211,14 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
           </HoverBtn>
         </motion.div>
 
-        {/* ── TOP-RIGHT: Share, Download, Protect ── */}
+        {/* ── TOP-RIGHT: Share, Download ── */}
         <motion.div
           animate={{ opacity: hovered ? 1 : 0, scale: hovered ? 1 : 0.8 }}
           transition={{ duration: 0.18, delay: 0.03 }}
           style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, pointerEvents: hovered ? 'auto' : 'none' }}
         >
           <HoverBtn title="Share"><Share2 size={14} /></HoverBtn>
-          <HoverBtn title="Download"><Download size={14} /></HoverBtn>
-          <HoverBtn title="Protect" variant="action">
-            <ShieldCheck size={14} color={COLORS.green} />
-          </HoverBtn>
+          <HoverBtn title="Download" onClick={() => downloadMedia(src, isVideo)}><Download size={14} /></HoverBtn>
         </motion.div>
 
         {/* ── BOTTOM-LEFT: Upscale ── */}
@@ -163,9 +227,11 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
           transition={{ duration: 0.18, delay: 0.05 }}
           style={{ position: 'absolute', bottom: 8, left: 8, pointerEvents: hovered ? 'auto' : 'none' }}
         >
-          <HoverBtn title="Upscale" onClick={() => onAction?.('upscale', src)}>
-            <Expand size={14} />
-          </HoverBtn>
+          {!isVideo && (
+            <HoverBtn title="Upscale" onClick={() => onAction?.('upscale', src, prompt)}>
+              <Expand size={14} />
+            </HoverBtn>
+          )}
         </motion.div>
 
         {/* ── BOTTOM-RIGHT: Image, Edit, Video, More ── */}
@@ -174,9 +240,9 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
           transition={{ duration: 0.18, delay: 0.05 }}
           style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4, pointerEvents: hovered ? 'auto' : 'none' }}
         >
-          <HoverBtn title="Generate Image" onClick={() => onAction?.('image', src)}><ImagePlus size={14} /></HoverBtn>
-          <HoverBtn title="Edit" onClick={() => onAction?.('edit', src)}><Wand2 size={14} /></HoverBtn>
-          <HoverBtn title="Generate Video" onClick={() => onAction?.('video', src)}><Video size={14} /></HoverBtn>
+          {!isVideo && <HoverBtn title="Generate Image" onClick={() => onAction?.('image', src, prompt)}><ImagePlus size={14} /></HoverBtn>}
+          {!isVideo && <HoverBtn title="Edit" onClick={() => onAction?.('edit', src, prompt)}><Wand2 size={14} /></HoverBtn>}
+          {!isVideo && <HoverBtn title="Generate Video" onClick={() => onAction?.('video', src, prompt)}><Video size={14} /></HoverBtn>}
           <HoverBtn title="More options"><MoreHorizontal size={14} /></HoverBtn>
         </motion.div>
       </Box>

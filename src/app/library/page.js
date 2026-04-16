@@ -1,17 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Checkbox from '@mui/material/Checkbox';
 import Tooltip from '@mui/material/Tooltip';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, LayoutGrid, Video, BookOpen, MoreVertical, FolderPlus, Check, X } from 'lucide-react';
+import { Plus, LayoutGrid, Video, Image as ImageIcon, MoreVertical, FolderPlus, Check, X, List, Download } from 'lucide-react';
 import { useTheme } from '@mui/material/styles';
 import Sidebar from '@/components/Sidebar';
-import { COLORS, RADIUS } from '@/theme/tokens';
+import MediaPreviewModal from '@/components/generate/MediaPreviewModal';
+import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
+
+function isVideoSource(src = '') {
+  return /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i.test(src) || src.includes('/videos/');
+}
 
 // ── Shared sample data ──────────────────────────────────────────────
 const ALL_GENERATIONS = [
@@ -36,8 +44,14 @@ const INITIAL_COLLECTIONS = [
 const TABS = ['Your Generations', 'Liked Feed', 'Collections'];
 const TYPE_FILTERS = [
   { id: 'all', label: 'All', icon: LayoutGrid },
+  { id: 'image', label: 'Image', icon: ImageIcon },
   { id: 'video', label: 'Video', icon: Video },
-  { id: 'blueprints', label: 'Blueprints', icon: BookOpen },
+];
+
+const SORT_OPTIONS = [
+  { id: 'newest', label: 'Newest first' },
+  { id: 'oldest', label: 'Oldest first' },
+  { id: 'name', label: 'Name A-Z' },
 ];
 
 // ── Collection card ──────────────────────────────────────────────────
@@ -93,8 +107,9 @@ function CollectionCard({ collection, onDelete, index }) {
 }
 
 // ── Generation card ──────────────────────────────────────────────────
-function GenerationCard({ item, selected, onSelect, index }) {
+function GenerationCard({ item, selected, onSelect, index, onPreview }) {
   const [hovered, setHovered] = useState(false);
+  const isVideo = isVideoSource(item.src);
 
   return (
     <motion.div
@@ -103,6 +118,7 @@ function GenerationCard({ item, selected, onSelect, index }) {
       transition={{ duration: 0.3, delay: index * 0.04 }}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
+      onClick={() => onPreview?.(item.src)}
       style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', cursor: 'pointer' }}
     >
       <Box
@@ -116,9 +132,13 @@ function GenerationCard({ item, selected, onSelect, index }) {
           transition: 'all 0.2s',
         }}
       >
-        <Box component="img" src={item.src} alt={item.prompt}
-          sx={{ width: '100%', display: 'block', transition: 'transform 0.3s', transform: hovered ? 'scale(1.04)' : 'scale(1)' }}
-        />
+        {isVideo ? (
+          <Box component="video" src={item.src} muted loop playsInline sx={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'cover' }} />
+        ) : (
+          <Box component="img" src={item.src} alt={item.prompt}
+            sx={{ width: '100%', display: 'block', transition: 'transform 0.3s', transform: hovered ? 'scale(1.04)' : 'scale(1)' }}
+          />
+        )}
 
         {/* Overlay */}
         <motion.div
@@ -173,10 +193,46 @@ export default function LibraryPage() {
   const [moveColSearch, setMoveColSearch] = useState('');
   const [moveNewName, setMoveNewName] = useState('');
   const [creatingMoveCol, setCreatingMoveCol] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewItems, setPreviewItems] = useState([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [viewMode, setViewMode] = useState('grid');
+  const menuRef = useRef(null);
 
   const toggleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
-  const filteredGenerations = ALL_GENERATIONS.filter((g) => typeFilter === 'all' || g.type === typeFilter);
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMoveToColOpen(false);
+      }
+    };
+    if (moveToColOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [moveToColOpen]);
+
+  const handlePreview = (src) => {
+    const allSrcs = filteredGenerations.map((g) => g.src);
+    const idx = allSrcs.indexOf(src);
+    setPreviewItems(allSrcs);
+    setPreviewIndex(idx >= 0 ? idx : 0);
+    setPreviewOpen(true);
+  };
+
+  const filteredGenerations = ALL_GENERATIONS
+    .filter((g) => typeFilter === 'all' || g.type === typeFilter)
+    .filter((g) => searchQuery === '' || g.prompt.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'newest') return 0; // Already sorted by index
+      if (sortBy === 'oldest') return 0;
+      if (sortBy === 'name') return a.prompt.localeCompare(b.prompt);
+      return 0;
+    });
 
   const handleNewCollection = () => {
     if (!newColName.trim()) return;
@@ -221,8 +277,7 @@ export default function LibraryPage() {
           minHeight: 'calc(100vh - 24px)',
           bgcolor: 'background.paper',
           borderRadius: '16px',
-          border: '1px solid', borderColor: 'divider',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
+          boxShadow: SHADOWS.sidebar,
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}
@@ -253,92 +308,221 @@ export default function LibraryPage() {
         </Box>
 
         {/* ── Toolbar ── */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', gap: 2 }}>
-          {/* Left: type filters */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* New button */}
-            <Button
-              size="small"
-              startIcon={<Plus size={13} />}
-              variant="outlined"
-              sx={{ fontSize: '0.72rem', borderRadius: '8px', borderColor: 'divider', color: 'text.secondary', px: 1.25, py: 0.5, textTransform: 'none', '&:hover': { borderColor: 'primary.main', color: 'primary.main' } }}
-            >
-              New
-            </Button>
-
-            {TYPE_FILTERS.map((f) => {
-              const Icon = f.icon;
-              const active = typeFilter === f.id;
-              return (
-                <Box
-                  key={f.id}
-                  onClick={() => setTypeFilter(f.id)}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.5,
-                    px: 1.25, py: 0.5, borderRadius: '8px', cursor: 'pointer',
-                    bgcolor: active ? COLORS.primaryAlpha[12] : 'transparent',
-                    border: '1px solid', borderColor: active ? 'primary.main' : 'divider',
-                    color: active ? 'primary.main' : 'text.secondary',
-                    fontSize: '0.72rem', fontWeight: active ? 600 : 400,
-                    transition: 'all 0.15s', '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
-                  }}
-                >
-                  <Icon size={12} strokeWidth={1.8} />
-                  <Typography sx={{ fontSize: '0.72rem', color: 'inherit', fontWeight: 'inherit' }}>{f.label}</Typography>
-                </Box>
-              );
-            })}
-          </Box>
-
-          {/* Right: select + new collection */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box
-              onClick={() => { setSelectMode((v) => !v); setSelectedIds([]); }}
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', color: selectMode ? 'primary.main' : 'text.secondary', '&:hover': { color: 'text.primary' } }}
-            >
-              <Checkbox
-                checked={selectMode}
+        <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+            {/* Left: search + filters */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
+              {/* Search */}
+              <TextField
                 size="small"
-                sx={{ p: 0, color: 'inherit', '&.Mui-checked': { color: 'primary.main' } }}
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                sx={{
+                  width: 240,
+                  '& .MuiOutlinedInput-root': {
+                    fontSize: '0.8rem',
+                    borderRadius: '10px',
+                    bgcolor: 'background.default',
+                    '& fieldset': { borderColor: 'divider', borderWidth: '1.5px' },
+                    '&:hover fieldset': { borderColor: 'primary.main' },
+                    '&.Mui-focused fieldset': { borderColor: 'primary.main', borderWidth: '1.5px' },
+                  },
+                }}
               />
-              <Typography sx={{ fontSize: '0.75rem', color: 'inherit', fontWeight: selectMode ? 600 : 400 }}>Select</Typography>
+
+              {/* Type filters */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: 'background.default', borderRadius: '10px', p: 0.5, border: '1px solid', borderColor: 'divider' }}>
+                {TYPE_FILTERS.map((f) => {
+                  const Icon = f.icon;
+                  const active = typeFilter === f.id;
+                  return (
+                    <Box
+                      key={f.id}
+                      onClick={() => setTypeFilter(f.id)}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 0.5,
+                        px: 1, py: 0.5, borderRadius: '8px', cursor: 'pointer',
+                        bgcolor: active ? 'primary.main' : 'transparent',
+                        color: active ? '#fff' : 'text.secondary',
+                        fontSize: '0.75rem', fontWeight: active ? 600 : 400,
+                        transition: 'all 0.2s', '&:hover': { bgcolor: active ? 'primary.main' : 'action.hover' },
+                      }}
+                    >
+                      <Icon size={12} strokeWidth={2} />
+                      <Typography sx={{ fontSize: '0.75rem', color: 'inherit', fontWeight: 'inherit' }}>{f.label}</Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+
+              {/* Sorting */}
+              <Select
+                size="small"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                sx={{
+                  fontSize: '0.8rem',
+                  borderRadius: '10px',
+                  minWidth: 140,
+                  '& .MuiOutlinedInput-root': {
+                    fontSize: '0.8rem',
+                    bgcolor: 'background.default',
+                    '& fieldset': { borderColor: 'divider', borderWidth: '1.5px' },
+                    '&:hover fieldset': { borderColor: 'primary.main' },
+                    '&.Mui-focused fieldset': { borderColor: 'primary.main', borderWidth: '1.5px' },
+                  },
+                }}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.id} value={opt.id} sx={{ fontSize: '0.8rem' }}>{opt.label}</MenuItem>
+                ))}
+              </Select>
             </Box>
 
-            {activeTab === 'Collections' && (
-              creatingCollection ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box
-                    component="input"
-                    value={newColName}
-                    onChange={(e) => setNewColName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleNewCollection(); if (e.key === 'Escape') setCreatingCollection(false); }}
-                    placeholder="Collection name..."
-                    autoFocus
+            {/* Right: select + view mode + new collection */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {!selectMode ? (
+                <>
+                  {/* Select button */}
+                  <Button
+                    size="small"
+                    startIcon={<Check size={14} />}
+                    onClick={() => { setSelectMode(true); setSelectedIds([]); }}
                     sx={{
-                      bgcolor: 'transparent', border: '1px solid', borderColor: 'primary.main',
-                      borderRadius: '8px', px: 1.25, py: 0.5, fontSize: '0.75rem',
-                      color: 'text.primary', outline: 'none', width: 160,
+                      fontSize: '0.8rem', borderRadius: '10px', textTransform: 'none',
+                      color: 'text.secondary', px: 1.5, py: 0.6,
+                      '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
                     }}
-                  />
-                  <IconButton size="small" onClick={handleNewCollection} sx={{ color: 'primary.main', p: 0.25 }}><Check size={14} /></IconButton>
-                  <IconButton size="small" onClick={() => setCreatingCollection(false)} sx={{ color: 'text.disabled', p: 0.25 }}><X size={14} /></IconButton>
-                </Box>
+                  >
+                    Select
+                  </Button>
+
+                  {/* View mode toggle */}
+                  <Tooltip title={viewMode === 'grid' ? 'List view' : 'Grid view'}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                      sx={{
+                        borderRadius: '10px',
+                        bgcolor: 'background.default',
+                        color: 'text.secondary',
+                        border: '1.5px solid', borderColor: 'divider',
+                        '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
+                      }}
+                    >
+                      {viewMode === 'grid' ? <List size={16} /> : <LayoutGrid size={16} />}
+                    </IconButton>
+                  </Tooltip>
+
+                  {/* New collection button (only on Collections tab) */}
+                  {activeTab === 'Collections' && (
+                    creatingCollection ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: 'background.default', borderRadius: '10px', p: 0.5, border: '1.5px solid', borderColor: 'primary.main' }}>
+                        <Box
+                          component="input"
+                          value={newColName}
+                          onChange={(e) => setNewColName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleNewCollection(); if (e.key === 'Escape') setCreatingCollection(false); }}
+                          placeholder="Collection name..."
+                          autoFocus
+                          sx={{
+                            bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.8rem',
+                            color: 'text.primary', width: 140,
+                          }}
+                        />
+                        <IconButton size="small" onClick={handleNewCollection} sx={{ color: 'primary.main', p: 0.3 }}><Check size={14} /></IconButton>
+                        <IconButton size="small" onClick={() => setCreatingCollection(false)} sx={{ color: 'text.disabled', p: 0.3 }}><X size={14} /></IconButton>
+                      </Box>
+                    ) : (
+                      <Button
+                        size="small"
+                        startIcon={<FolderPlus size={14} />}
+                        onClick={() => setCreatingCollection(true)}
+                        sx={{
+                          fontSize: '0.8rem', borderRadius: '10px', textTransform: 'none',
+                          bgcolor: 'primary.main', color: '#000', fontWeight: 700, px: 1.5, py: 0.6,
+                          '&:hover': { bgcolor: COLORS.primaryHover },
+                        }}
+                      >
+                        New
+                      </Button>
+                    )
+                  )}
+                </>
               ) : (
                 <Button
                   size="small"
-                  startIcon={<FolderPlus size={13} />}
-                  onClick={() => setCreatingCollection(true)}
+                  onClick={() => { setSelectedIds([]); setSelectMode(false); setMoveToColOpen(false); }}
                   sx={{
-                    fontSize: '0.72rem', borderRadius: '8px', textTransform: 'none',
-                    bgcolor: COLORS.primary, color: '#000', fontWeight: 700, px: 1.5, py: 0.5,
-                    '&:hover': { bgcolor: COLORS.primaryHover },
+                    fontSize: '0.8rem', color: 'text.secondary', textTransform: 'none', borderRadius: '10px', px: 1.5, py: 0.6,
+                    '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
                   }}
                 >
-                  New Collection
+                  Exit Select
                 </Button>
-              )
-            )}
+              )}
+            </Box>
           </Box>
+
+          {/* Select mode action bar (separate row) */}
+          <AnimatePresence>
+            {selectMode && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5, px: 1.5, py: 1, borderRadius: '10px', bgcolor: 'background.default', border: '1.5px solid', borderColor: 'divider' }}>
+                  {/* Left: count */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.85rem', color: 'text.primary', fontWeight: 700 }}>
+                      {selectedIds.length} selected
+                    </Typography>
+                  </Box>
+
+                  {/* Right: actions */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Button
+                      size="small"
+                      startIcon={<FolderPlus size={13} />}
+                      disabled={selectedIds.length === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMoveToColOpen((v) => !v);
+                      }}
+                      sx={{ fontSize: '0.8rem', textTransform: 'none', borderRadius: '8px', px: 1.25, py: 0.6, bgcolor: 'background.default', border: '1.5px solid', borderColor: 'divider', color: selectedIds.length > 0 ? 'text.secondary' : 'text.disabled', opacity: selectedIds.length > 0 ? 1 : 0.5, '&:hover': selectedIds.length > 0 ? { bgcolor: 'action.hover', borderColor: 'divider', color: 'text.primary' } : {}, '&.Mui-disabled': { opacity: 0.5, color: 'text.disabled' } }}
+                    >
+                      Move to Collection
+                    </Button>
+                    <Button
+                      size="small"
+                      startIcon={<Download size={13} />}
+                      disabled={selectedIds.length === 0}
+                      onClick={() => {
+                        selectedSrcs.forEach((src, i) => {
+                          const a = document.createElement('a');
+                          a.href = src; a.download = `library-${i + 1}.jpg`; a.click();
+                        });
+                      }}
+                      sx={{ fontSize: '0.8rem', textTransform: 'none', borderRadius: '8px', px: 1.25, py: 0.6, bgcolor: 'background.default', border: '1.5px solid', borderColor: 'divider', color: selectedIds.length > 0 ? 'text.secondary' : 'text.disabled', opacity: selectedIds.length > 0 ? 1 : 0.5, '&:hover': selectedIds.length > 0 ? { bgcolor: 'action.hover', borderColor: 'divider', color: 'text.primary' } : {}, '&.Mui-disabled': { opacity: 0.5, color: 'text.disabled' } }}
+                    >
+                      Download all
+                    </Button>
+                    <Button
+                      size="small"
+                      disabled={selectedIds.length === 0}
+                      onClick={() => { setSelectedIds([]); setMoveToColOpen(false); }}
+                      sx={{ fontSize: '0.8rem', textTransform: 'none', borderRadius: '8px', px: 1.25, py: 0.6, bgcolor: 'background.default', border: '1.5px solid', borderColor: 'divider', color: selectedIds.length > 0 ? COLORS.red : 'text.disabled', opacity: selectedIds.length > 0 ? 1 : 0.5, '&:hover': selectedIds.length > 0 ? { bgcolor: `${COLORS.red}10`, borderColor: COLORS.red } : {}, '&.Mui-disabled': { opacity: 0.5, color: 'text.disabled' } }}
+                    >
+                      Clear
+                    </Button>
+                  </Box>
+                </Box>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </Box>
 
         {/* ── Content ── */}
@@ -372,78 +556,59 @@ export default function LibraryPage() {
             ) : activeTab === 'Your Generations' ? (
               <motion.div key="generations" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                 <Box sx={{ position: 'relative' }}>
-                {/* Selected action bar */}
-                <AnimatePresence>
-                  {selectMode && selectedIds.length > 0 && (
-                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, px: 1.5, py: 0.9, borderRadius: RADIUS.md, bgcolor: COLORS.primaryAlpha[10], border: `1px solid ${COLORS.primaryAlpha[20]}` }}>
-                        <Typography sx={{ fontSize: '0.78rem', color: 'primary.main', fontWeight: 600 }}>{selectedIds.length} selected</Typography>
-                        <Button
-                          size="small"
-                          startIcon={<FolderPlus size={13} />}
-                          onClick={() => setMoveToColOpen((v) => !v)}
-                          sx={{ fontSize: '0.72rem', textTransform: 'none', color: COLORS.cyan, borderRadius: '7px', border: `1px solid ${COLORS.cyanAlpha[10]}`, px: 1.25, py: 0.4, '&:hover': { bgcolor: COLORS.cyanAlpha[10] } }}
-                        >
-                          Move to Collection
-                        </Button>
-                        <Button size="small" sx={{ fontSize: '0.7rem', color: COLORS.red, textTransform: 'none', minWidth: 0 }} onClick={() => { setSelectedIds([]); setMoveToColOpen(false); }}>Clear</Button>
-
-                        {/* Inline collection picker */}
-                        <AnimatePresence>
-                          {moveToColOpen && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.95, y: -6 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.95, y: -6 }}
-                              transition={{ duration: 0.18 }}
-                              style={{ position: 'absolute', top: 44, left: 0, zIndex: 200, minWidth: 260 }}
-                            >
-                              <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
-                                {/* Search */}
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-                                  <Box component="input" value={moveColSearch} onChange={(e) => setMoveColSearch(e.target.value)} placeholder="Search collections..." autoFocus
-                                    sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.78rem', color: 'text.primary', flex: 1 }} />
+                  {/* Inline collection picker (for Move to Collection) */}
+                  <AnimatePresence>
+                    {moveToColOpen && (
+                      <motion.div
+                        ref={menuRef}
+                        initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -6 }}
+                        transition={{ duration: 0.18 }}
+                        style={{ position: 'absolute', top: 0, right: 0, zIndex: 200, minWidth: 280 }}
+                      >
+                        <Box sx={{ bgcolor: 'background.paper', border: '1.5px solid', borderColor: 'divider', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+                          {/* Search */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                            <Box component="input" value={moveColSearch} onChange={(e) => setMoveColSearch(e.target.value)} placeholder="Search collections..." autoFocus
+                              sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.8rem', color: 'text.primary', flex: 1 }} />
+                          </Box>
+                          {/* List */}
+                          <Box sx={{ maxHeight: 220, overflowY: 'auto', scrollbarWidth: 'none' }}>
+                            {filteredMoveCollections.map((col) => (
+                              <Box key={col.id} onClick={() => handleMoveToCollection(col.id)}
+                                sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
+                                <Box sx={{ width: 32, height: 32, borderRadius: '8px', overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.06)', flexShrink: 0 }}>
+                                  {col.images[0] && <Box component="img" src={col.images[0]} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                                 </Box>
-                                {/* List */}
-                                <Box sx={{ maxHeight: 200, overflowY: 'auto', scrollbarWidth: 'none' }}>
-                                  {filteredMoveCollections.map((col) => (
-                                    <Box key={col.id} onClick={() => handleMoveToCollection(col.id)}
-                                      sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 0.9, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
-                                      <Box sx={{ width: 28, height: 28, borderRadius: '6px', overflow: 'hidden', bgcolor: 'rgba(255,255,255,0.06)', flexShrink: 0 }}>
-                                        {col.images[0] && <Box component="img" src={col.images[0]} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
-                                      </Box>
-                                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.primary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.name}</Typography>
-                                        <Typography sx={{ fontSize: '0.62rem', color: 'text.disabled' }}>{col.images.length} images</Typography>
-                                      </Box>
-                                    </Box>
-                                  ))}
-                                </Box>
-                                <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
-                                  {creatingMoveCol ? (
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.5, py: 0.9 }}>
-                                      <Box component="input" value={moveNewName} onChange={(e) => setMoveNewName(e.target.value)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') handleCreateAndMove(); if (e.key === 'Escape') setCreatingMoveCol(false); }}
-                                        placeholder="Collection name..." autoFocus
-                                        sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.75rem', color: 'text.primary', flex: 1 }} />
-                                      <IconButton size="small" onClick={handleCreateAndMove} sx={{ color: 'primary.main', p: 0.25 }}><Check size={13} /></IconButton>
-                                      <IconButton size="small" onClick={() => setCreatingMoveCol(false)} sx={{ color: 'text.disabled', p: 0.25 }}><X size={13} /></IconButton>
-                                    </Box>
-                                  ) : (
-                                    <Box onClick={() => setCreatingMoveCol(true)} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.9, cursor: 'pointer', color: 'text.secondary', '&:hover': { color: 'primary.main', bgcolor: 'action.hover' } }}>
-                                      <Plus size={13} />
-                                      <Typography sx={{ fontSize: '0.75rem', color: 'inherit' }}>New collection</Typography>
-                                    </Box>
-                                  )}
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'text.primary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.name}</Typography>
+                                  <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled' }}>{col.images.length} images</Typography>
                                 </Box>
                               </Box>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </Box>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                            ))}
+                          </Box>
+                          <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+                            {creatingMoveCol ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.5, py: 1 }}>
+                                <Box component="input" value={moveNewName} onChange={(e) => setMoveNewName(e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreateAndMove(); if (e.key === 'Escape') setCreatingMoveCol(false); }}
+                                  placeholder="Collection name..." autoFocus
+                                  sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.8rem', color: 'text.primary', flex: 1 }} />
+                                <IconButton size="small" onClick={handleCreateAndMove} sx={{ color: 'primary.main', p: 0.3 }}><Check size={14} /></IconButton>
+                                <IconButton size="small" onClick={() => setCreatingMoveCol(false)} sx={{ color: 'text.disabled', p: 0.3 }}><X size={14} /></IconButton>
+                              </Box>
+                            ) : (
+                              <Box onClick={() => setCreatingMoveCol(true)} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, cursor: 'pointer', color: 'text.secondary', '&:hover': { color: 'primary.main', bgcolor: 'action.hover' } }}>
+                                <Plus size={14} />
+                                <Typography sx={{ fontSize: '0.8rem', color: 'inherit' }}>New collection</Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        </Box>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 1.5 }}>
                   {filteredGenerations.map((item, i) => (
@@ -453,6 +618,7 @@ export default function LibraryPage() {
                       index={i}
                       selected={selectedIds.includes(item.id)}
                       onSelect={selectMode ? toggleSelect : () => {}}
+                      onPreview={handlePreview}
                     />
                   ))}
                 </Box>
@@ -467,6 +633,13 @@ export default function LibraryPage() {
             )}
           </AnimatePresence>
         </Box>
+
+        <MediaPreviewModal
+          items={previewItems}
+          open={previewOpen}
+          startIndex={previewIndex}
+          onClose={() => setPreviewOpen(false)}
+        />
       </Box>
     </Box>
   );

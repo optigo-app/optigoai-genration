@@ -123,7 +123,7 @@ function SectionLabel({ label }) {
       {label}
     </Typography>
   );
-}
+} 
 
 export default function Sidebar() {
   const { mode, toggleColorMode } = useColorMode();
@@ -167,8 +167,35 @@ export default function Sidebar() {
     >
       {/* Logo */}
       <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-        <Box component={Link} href="/" scroll={false} sx={{ width: 36, height: 36, borderRadius: RADIUS.md, background: COLORS.gradientPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.15rem', fontWeight: 900, color: '#fff', flexShrink: 0, textDecoration: 'none', boxShadow: '0 4px 14px rgba(115, 103, 240, 0.4)', '&:hover': { transform: 'scale(1.08)', boxShadow: '0 6px 20px rgba(115, 103, 240, 0.5)' }, transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }}>
-          ✦
+        <Box
+          component={Link}
+          href="/"
+          scroll={false}
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: RADIUS.md,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            textDecoration: 'none',
+            boxShadow: '0 4px 14px rgba(115, 103, 240, 0.4)',
+            '&:hover': { transform: 'scale(1.08)', boxShadow: '0 6px 20px rgba(115, 103, 240, 0.5)' },
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
+          <Box
+            component="img"
+            src="/icons/base-icon1.svg"
+            alt="Optigo AI"
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: RADIUS.md,
+              objectFit: 'contain',
+            }}
+          />
         </Box>
       </Box>
 

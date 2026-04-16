@@ -17,7 +17,7 @@ export async function POST(request) {
     thirdPartyFormData.append('file', file);
 
     const authHeader = request.headers.get('authorization');
-    const response = await fetch(getApiUrl('/sketch'), {
+    const response = await fetch(getApiUrl('/process/sketch'), {
       method: 'POST',
       body: thirdPartyFormData,
       headers: getApiHeaders(authHeader),

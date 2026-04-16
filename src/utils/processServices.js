@@ -93,13 +93,17 @@ export async function processImageDynamicPrompt({ file, prompt, modelId, authori
 
 export async function processGeminiVideoGenerate({ files, prompt, modelId, durationSeconds, authorizationToken }) {
   const formData = new FormData();
-  (files || []).forEach((file) => {
-    if (file) {
-      formData.append('file', file);
-    }
-  });
+  const primaryFile = (files || [])[0];
+  const secondaryFile = (files || [])[1];
+  if (primaryFile) {
+    formData.append('image1_object', primaryFile);
+  }
 
   formData.append('prompt', prompt || '');
+
+  if (secondaryFile) {
+    formData.append('image2_model', secondaryFile);
+  }
 
   if (modelId) {
     formData.append('model', modelId);
@@ -114,7 +118,7 @@ export async function processGeminiVideoGenerate({ files, prompt, modelId, durat
     headers.Authorization = authorizationToken;
   }
 
-  const response = await fetch('/api/genrate/gemini/generate-video', {
+  const response = await fetch('/api/generate-video', {
     method: 'POST',
     body: formData,
     headers,
@@ -139,7 +143,16 @@ export async function processGeminiVideoGenerate({ files, prompt, modelId, durat
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const data = await response.json();
-    const videoUrl = data?.video || data?.url || data?.result?.video || data?.result?.url || null;
+    const videoUrl =
+      data?.local_video_url ||
+      data?.video ||
+      data?.url ||
+      data?.output_video ||
+      data?.result?.local_video_url ||
+      data?.result?.video ||
+      data?.result?.url ||
+      data?.result?.output_video ||
+      null;
     return { type: 'json', data, videoUrl };
   }
 
@@ -148,6 +161,91 @@ export async function processGeminiVideoGenerate({ files, prompt, modelId, durat
     type: 'blob',
     blob,
     videoUrl: URL.createObjectURL(blob),
+  };
+}
+
+export async function processMultiReferenceJewelry({
+  modelImage,
+  ringImages,
+  necklaceImages,
+  bangleImages,
+  earingImages,
+  prompt,
+  maxJewelryReferences,
+  geminiModel,
+  authorizationToken,
+}) {
+  const formData = new FormData();
+
+  if (modelImage) {
+    formData.append('model_image', modelImage);
+  }
+
+  if (ringImages && ringImages.length > 0) {
+    ringImages.forEach((file) => formData.append('ring_images', file));
+  }
+
+  if (necklaceImages && necklaceImages.length > 0) {
+    necklaceImages.forEach((file) => formData.append('necklace_images', file));
+  }
+
+  if (bangleImages && bangleImages.length > 0) {
+    bangleImages.forEach((file) => formData.append('bangle_images', file));
+  }
+
+  if (earingImages && earingImages.length > 0) {
+    earingImages.forEach((file) => formData.append('earing_images', file));
+  }
+
+  formData.append('prompt', prompt || '');
+
+  if (maxJewelryReferences !== undefined && maxJewelryReferences !== null) {
+    formData.append('max_jewelry_references', String(maxJewelryReferences));
+  }
+
+  if (geminiModel) {
+    formData.append('gemini_model', geminiModel);
+  }
+
+  const headers = {};
+  if (authorizationToken) {
+    headers.Authorization = authorizationToken;
+  }
+
+  const response = await fetch('/api/multi-reference-jewelry', {
+    method: 'POST',
+    body: formData,
+    headers,
+  });
+
+  if (!response.ok) {
+    let message = 'Failed to generate jewelry image with multi-reference';
+    try {
+      const errorData = await response.json();
+      if (errorData?.error) {
+        message = errorData.error;
+      }
+    } catch {
+      const errorText = await response.text().catch(() => '');
+      if (errorText) {
+        message = errorText;
+      }
+    }
+    throw new Error(message);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await response.json();
+    const imageUrl = data?.image || data?.url || data?.result?.image || data?.result?.url || null;
+    return { type: 'json', data, imageUrl };
+  }
+
+  const blob = await response.blob();
+  return {
+    type: 'blob',
+    blob,
+    imageUrl: URL.createObjectURL(blob),
   };
 }
 

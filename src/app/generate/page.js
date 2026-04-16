@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -15,9 +15,10 @@ import SelectionBar from '@/components/generate/SelectionBar';
 import CollectionsModal from '@/components/generate/CollectionsModal';
 import DesignCollectionPanel from '@/components/generate/DesignCollectionPanel';
 import ModelSelectPanel, { IMAGE_MODELS, VIDEO_MODELS } from '@/components/generate/ModelSelectPanel';
+import ImageEditWorkspace from '@/components/generate/ImageEditWorkspace';
 import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
-import { fileFromImageUrl, processSketchImage, processImageDynamicPrompt } from '@/utils/processServices';
-import { IconButton, Tooltip } from '@mui/material';
+import { fileFromImageUrl, processSketchImage, processImageDynamicPrompt, processGeminiVideoGenerate, processMultiReferenceJewelry } from '@/utils/processServices';
+import { IconButton, Tooltip, useTheme } from '@mui/material';
 
 const SAMPLE_HISTORY = [
   {
@@ -53,13 +54,23 @@ const DEFAULT_SETTINGS = {
 
 const PANEL_HEIGHT = 'calc(100vh - 24px)';
 
+const ACTION_CONFIG = {
+  upscale: { prompt: 'Upscale this image to maximum resolution, enhance details and sharpness', mode: 'image' },
+  image: { prompt: 'Generate a refined image variation based on this reference', mode: 'image' },
+  edit: { prompt: 'Edit and enhance this image: ', mode: 'image' },
+  video: { prompt: 'Animate this image into a smooth cinematic video', mode: 'video' },
+};
+
 export default function GeneratePage() {
+  const theme = useTheme();
   const searchParams = useSearchParams();
   const router = useRouter();
   const promptInputRef = useRef(null);
+  const resultsScrollRef = useRef(null);
 
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState(searchParams.get('mode') || 'image');
+  const [imageUploadMode, setImageUploadMode] = useState('single');
 
   // Restore state passed from home page
   useEffect(() => {
@@ -83,8 +94,21 @@ export default function GeneratePage() {
 
   useEffect(() => {
     const m = searchParams.get('mode');
-    if (m && m !== mode) setMode(m);
+    if (m && m !== mode) {
+      setMode(m);
+    }
   }, [searchParams]);
+
+  // Auto-select multi-jewelry model when switching to multi mode
+  useEffect(() => {
+    if (imageUploadMode === 'multi') {
+      setSettings((prev) => ({
+        ...prev,
+        imageModel: 'gemini-2.5-flash-image-preview',
+      }));
+    }
+  }, [imageUploadMode]);
+
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [history, setHistory] = useState(SAMPLE_HISTORY);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -95,7 +119,10 @@ export default function GeneratePage() {
   const [designPanelOpen, setDesignPanelOpen] = useState(false);
   const [modelPanelOpen, setModelPanelOpen] = useState(false);
   const [collections, setCollections] = useState([]);
-  const canGenerate = mode === 'sketch' ? uploadedImages.length > 0 : Boolean(prompt.trim());
+  const [editWorkspaceOpen, setEditWorkspaceOpen] = useState(false);
+  const [editSelectedImage, setEditSelectedImage] = useState(null);
+  const [editSelectedPrompt, setEditSelectedPrompt] = useState('');
+  const canGenerate = mode === 'sketch' ? uploadedImages.length > 0 : undefined;
   const uploadAccept = mode === 'video' ? 'image/*,video/*' : 'image/*';
 
   const handleToggleCollection = (colId, images) => {
@@ -124,11 +151,11 @@ export default function GeneratePage() {
     setTimeout(() => promptInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
   };
 
-  const handleSelect = (imgSrc) => {
+  const handleSelect = useCallback((imgSrc) => {
     setSelectedImages((prev) =>
       prev.includes(imgSrc) ? prev.filter((s) => s !== imgSrc) : [...prev, imgSrc]
     );
-  };
+  }, []);
 
   const handleSelectionAction = (actionId) => {
     if (actionId === 'download') {
@@ -144,18 +171,35 @@ export default function GeneratePage() {
     }
   };
 
-  // Action configs per type
-  const ACTION_CONFIG = {
-    upscale: { prompt: 'Upscale this image to maximum resolution, enhance details and sharpness', mode: 'image' },
-    image: { prompt: 'Generate a refined image variation based on this reference', mode: 'image' },
-    edit: { prompt: 'Edit and enhance this image: ', mode: 'image' },
-    video: { prompt: 'Animate this image into a smooth cinematic video', mode: 'video' },
-  };
+  const handleAction = useCallback((type, imgSrc, promptText) => {
+    if (type === 'reuse') {
+      const reusePrompt = imgSrc?.prompt || promptText || '';
+      const reuseReferenceImages = Array.isArray(imgSrc?.referenceImages) ? imgSrc.referenceImages : [];
 
-  const handleAction = (type, imgSrc) => {
+      setPrompt(reusePrompt);
+      setUploadedImages(
+        reuseReferenceImages.map((url, idx) => ({
+          id: `reuse-${Date.now()}-${idx}`,
+          url,
+          name: `ref-reuse-${idx + 1}.jpg`,
+        }))
+      );
+      setMode('image');
+      return;
+    }
+
     const config = ACTION_CONFIG[type];
     if (!config) return;
-    // Set image as reference inside input
+
+    // Open edit workspace for edit action
+    if (type === 'edit') {
+      setEditSelectedImage(imgSrc);
+      setEditSelectedPrompt(promptText || '');
+      setEditWorkspaceOpen(true);
+      return;
+    }
+
+    // Set image as reference inside input for other actions
     fetch(imgSrc)
       .then(r => r.blob())
       .then(blob => {
@@ -171,18 +215,77 @@ export default function GeneratePage() {
     setMode(config.mode);
     // Scroll prompt into view
     setTimeout(() => promptInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  }, []);
+
+  const handleEditWorkspacePromptChange = (newPrompt) => {
+    setEditSelectedPrompt(newPrompt);
   };
 
-  const handleGenerate = async () => {
-    if (!canGenerate || isGenerating) return;
+  const handleEditWorkspaceUpscale = () => {
+    setUploadedImages([{ id: `upscale-${Date.now()}`, url: editSelectedImage, name: 'upscale-source.jpg' }]);
+    setPrompt('Upscale this image to maximum resolution, enhance details and sharpness');
+    setMode('image');
+    setEditWorkspaceOpen(false);
+    setTimeout(() => promptInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  };
+
+  const handleEditWorkspaceVideo = () => {
+    setUploadedImages([{ id: `video-${Date.now()}`, url: editSelectedImage, name: 'video-source.jpg' }]);
+    setPrompt('Animate this image into a smooth cinematic video');
+    setMode('video');
+    setEditWorkspaceOpen(false);
+    setTimeout(() => promptInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  };
+
+  const handleEditWorkspaceRemix = () => {
+    setUploadedImages([{ id: `remix-${Date.now()}`, url: editSelectedImage, name: 'remix-source.jpg' }]);
+    setPrompt(editSelectedPrompt || 'Generate a refined image variation based on this reference');
+    setMode('image');
+    setEditWorkspaceOpen(false);
+    setTimeout(() => promptInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  };
+
+  const handleCloseEditWorkspace = () => {
+    setEditWorkspaceOpen(false);
+    setEditSelectedImage(null);
+    setEditSelectedPrompt('');
+  };
+
+  const handleEditWorkspaceGenerate = (newPrompt, image) => {
+    setUploadedImages([{ id: `edit-gen-${Date.now()}`, url: image, name: 'edit-source.jpg' }]);
+    setPrompt(newPrompt);
+    setMode('image');
+    setEditWorkspaceOpen(false);
+    setTimeout(() => {
+      promptInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Auto-trigger generate after a short delay
+      setTimeout(() => {
+        handleGenerate(newPrompt);
+      }, 300);
+    }, 100);
+  };
+
+  const handleGenerate = async (promptOverride) => {
+    const activePrompt = typeof promptOverride === 'string' ? promptOverride : prompt;
+    const canGenerateNow = mode === 'sketch' ? uploadedImages.length > 0 : Boolean(activePrompt.trim());
+    if (!canGenerateNow || isGenerating) return;
 
     if (mode === 'sketch' && uploadedImages.length === 0) {
       alert('Please upload at least one image for sketch conversion.');
       return;
     }
 
+    if (mode === 'video' && uploadedImages.length === 0) {
+      alert('Please upload at least one media file for video generation.');
+      return;
+    }
+
+    if (activePrompt !== prompt) {
+      setPrompt(activePrompt);
+    }
+
     setIsGenerating(true);
-    setGeneratingPrompt(prompt);
+    setGeneratingPrompt(activePrompt);
 
     try {
       if (mode === 'sketch') {
@@ -194,8 +297,9 @@ export default function GeneratePage() {
         setHistory((prev) => [{
           id: Date.now(),
           date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
-          prompt,
+          prompt: activePrompt,
           images: [sketchImageUrl],
+          referenceImages: uploadedImages.map(img => img.url),
           tags: ['sketch', settings.dimension],
           dimension: settings.dimension,
         }, ...prev]);
@@ -204,14 +308,91 @@ export default function GeneratePage() {
         return;
       }
 
+      if (mode === 'video') {
+        const files = await Promise.all(
+          uploadedImages.map((item, idx) => fileFromImageUrl(item.url, item.name || `video-source-${idx + 1}.mp4`))
+        );
+        const modelId = settings.videoModel || VIDEO_MODELS[0]?.id;
+        const durationSeconds = Number.parseInt(String(settings.videoDuration || '5').replace(/\D/g, ''), 10) || 5;
+
+        const result = await processGeminiVideoGenerate({
+          files,
+          prompt: activePrompt,
+          modelId,
+          durationSeconds,
+        });
+
+        const generatedVideoUrl = result.videoUrl;
+        if (!generatedVideoUrl) {
+          throw new Error('Video generation succeeded but no video URL was returned.');
+        }
+
+        setHistory((prev) => [{
+          id: Date.now(),
+          date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+          prompt: activePrompt,
+          images: [generatedVideoUrl],
+          referenceImages: uploadedImages.map(img => img.url),
+          tags: [modelId, 'video', settings.dimension, `${durationSeconds}s`].filter(Boolean),
+          dimension: settings.dimension,
+        }, ...prev]);
+
+        setPrompt('');
+        return;
+      }
+
       if (mode === 'image' && uploadedImages.length > 0) {
+        const modelId = settings.imageModel || IMAGE_MODELS[0]?.id;
+
+        // Check if using a multi-jewelry model or in multi-jewelry mode
+        const isMultiJewelryModel = modelId === 'gemini-2.5-flash-image-preview' || modelId === 'gemini-2.5-flash-image';
+        const useMultiJewelryApi = isMultiJewelryModel || (imageUploadMode === 'multi' && uploadedImages.length >= 6);
+
+        if (useMultiJewelryApi) {
+          // Multi-jewelry mode: index 0 = model, 1 = rings, 2 = necklaces, 3 = bangles, 4 = earrings, 5 = other
+          const modelImage = uploadedImages[0];
+          const ringImages = uploadedImages[1] ? [await fileFromImageUrl(uploadedImages[1].url, 'ring.jpg')] : [];
+          const necklaceImages = uploadedImages[2] ? [await fileFromImageUrl(uploadedImages[2].url, 'necklace.jpg')] : [];
+          const bangleImages = uploadedImages[3] ? [await fileFromImageUrl(uploadedImages[3].url, 'bangle.jpg')] : [];
+          const earingImages = uploadedImages[4] ? [await fileFromImageUrl(uploadedImages[4].url, 'earing.jpg')] : [];
+          const otherImages = uploadedImages[5] ? [await fileFromImageUrl(uploadedImages[5].url, 'other.jpg')] : [];
+
+          const modelFile = await fileFromImageUrl(modelImage.url, modelImage.name || 'model.jpg');
+
+          const result = await processMultiReferenceJewelry({
+            modelImage: modelFile,
+            ringImages,
+            necklaceImages,
+            bangleImages,
+            earingImages,
+            prompt: activePrompt,
+            geminiModel: modelId,
+            maxJewelryReferences: 10,
+          });
+
+          const generatedImageUrl = result.imageUrl || modelImage.url;
+
+          setHistory((prev) => [{
+            id: Date.now(),
+            date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+            prompt: activePrompt,
+            images: [generatedImageUrl],
+            referenceImages: uploadedImages.map(img => img.url),
+            tags: [modelId, 'multi-jewelry', settings.dimension].filter(Boolean),
+            dimension: settings.dimension,
+          }, ...prev]);
+
+          setPrompt('');
+          return;
+        }
+
+        // Single mode or regular image mode
         const sourceImage = uploadedImages[0];
         const file = await fileFromImageUrl(sourceImage.url, sourceImage.name || 'image-source.png');
-        const modelId = settings.imageModel || IMAGE_MODELS[0]?.id;
 
         const result = await processImageDynamicPrompt({
           file,
-          prompt,
+          prompt: activePrompt,
           modelId,
         });
 
@@ -220,8 +401,9 @@ export default function GeneratePage() {
         setHistory((prev) => [{
           id: Date.now(),
           date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
-          prompt,
+          prompt: activePrompt,
           images: [generatedImageUrl],
+          referenceImages: uploadedImages.map(img => img.url),
           tags: [modelId, 'image', settings.dimension].filter(Boolean),
           dimension: settings.dimension,
         }, ...prev]);
@@ -238,7 +420,8 @@ export default function GeneratePage() {
         setHistory((prev) => [{
           id: Date.now(),
           date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
-          prompt, images: seeds,
+          prompt: activePrompt, images: seeds,
+          referenceImages: uploadedImages.map(img => img.url),
           tags: [settings.preset?.toLowerCase(), mode, settings.dimension].filter(Boolean),
           dimension: settings.dimension,
         }, ...prev]);
@@ -248,7 +431,7 @@ export default function GeneratePage() {
       console.error('Sketch generation failed:', error);
       alert(error?.message || 'Sketch conversion failed. Please try again.');
     } finally {
-      if (mode === 'sketch') {
+      if (mode === 'sketch' || mode === 'image' || mode === 'video') {
         setIsGenerating(false);
         setGeneratingPrompt('');
       } else {
@@ -312,7 +495,7 @@ export default function GeneratePage() {
 
             {/* Settings panel fills rest */}
             <Box sx={{ flex: 1, overflow: 'hidden' }}>
-              <GenerateSettingsPanel settings={settings} onChange={setSettings} mode={mode} onOpenModelPanel={() => { setModelPanelOpen(true); setDesignPanelOpen(false); }} />
+              <GenerateSettingsPanel settings={settings} onChange={setSettings} mode={mode} onOpenModelPanel={() => { setModelPanelOpen(true); setDesignPanelOpen(false); }} collections={collections} onCreateCollection={handleCreateCollection} />
             </Box>
           </Box>{/* end settings column */}
 
@@ -352,8 +535,6 @@ export default function GeneratePage() {
               px: 2.5,
               pt: 2,
               pb: 1.5,
-              borderBottom: '1px solid',
-              borderColor: 'divider',
               display: 'flex',
               flexDirection: 'column',
               gap: 1.25,
@@ -372,6 +553,9 @@ export default function GeneratePage() {
               onImagesChange={setUploadedImages}
               inputRef={promptInputRef}
               radius="12px"
+              mode={mode}
+              imageUploadMode={imageUploadMode}
+              onImageUploadModeChange={setImageUploadMode}
             />
 
             {/* Mode toggle */}
@@ -379,11 +563,11 @@ export default function GeneratePage() {
           </Box>
 
           {/* Results header */}
-          <Box sx={{ px: 2.5, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <Box sx={{ px: 2.5, py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: theme.palette.text.secondary, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Generated Results
             </Typography>
-            <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled' }}>
+            <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: theme.palette.text.secondary }}>
               {history.length} generation{history.length !== 1 ? 's' : ''}
             </Typography>
           </Box>
@@ -399,6 +583,7 @@ export default function GeneratePage() {
             }}
           >
             <Box
+              ref={resultsScrollRef}
               sx={{
                 flex: 1,
                 overflowY: 'auto',
@@ -417,10 +602,10 @@ export default function GeneratePage() {
                     <motion.div animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 2.5, repeat: Infinity }}>
                       <Sparkles size={52} strokeWidth={1} color={COLORS.primary} />
                     </motion.div>
-                    <Typography sx={{ fontSize: '0.88rem', color: 'text.disabled', textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '0.88rem', fontWeight: 500, color: 'text.disabled', textAlign: 'center' }}>
                       Your generated images will appear here
                     </Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled', opacity: 0.6 }}>
+                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 400, color: 'text.disabled', opacity: 0.7 }}>
                       Type a prompt and click Generate
                     </Typography>
                   </Box>
@@ -451,6 +636,7 @@ export default function GeneratePage() {
                     date={group.date}
                     prompt={group.prompt}
                     images={group.images}
+                    referenceImages={group.referenceImages}
                     tags={group.tags}
                     dimension={group.dimension}
                     onAction={handleAction}
@@ -483,6 +669,21 @@ export default function GeneratePage() {
         collections={collections}
         onDeleteCollection={handleDeleteCollection}
       />
+
+      {/* Image edit workspace */}
+      {editWorkspaceOpen && (
+        <ImageEditWorkspace
+          images={history.flatMap(h => h.images)}
+          selectedImage={editSelectedImage}
+          prompt={editSelectedPrompt}
+          onClose={handleCloseEditWorkspace}
+          onPromptChange={handleEditWorkspacePromptChange}
+          onUpscale={handleEditWorkspaceUpscale}
+          onVideoGenerate={handleEditWorkspaceVideo}
+          onRemix={handleEditWorkspaceRemix}
+          onGenerate={handleEditWorkspaceGenerate}
+        />
+      )}
     </Box>
   );
 }

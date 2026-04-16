@@ -9,7 +9,7 @@ import Modal from '@mui/material/Modal';
 import { useTheme } from '@mui/material/styles';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, Trash2, Plus } from 'lucide-react';
-import { COLORS } from '@/theme/tokens';
+import { COLORS, RADIUS } from '@/theme/tokens';
 
 export default function ImageLightbox({ images, startIndex = 0, open, onClose, onRemove, onAddMore }) {
   const [current, setCurrent] = useState(startIndex);

@@ -14,9 +14,9 @@ export const TOOL_ITEMS = [
   { id: 'image', label: 'Image', icon: Image, isNew: false, mode: 'image', href: '/generate?mode=image' },
   { id: 'video', label: 'Video', icon: Video, isNew: false, mode: 'video', href: '/generate?mode=video' },
   { id: 'cad', label: 'CAD', icon: Workflow, isNew: false, mode: 'cad', href: '/generate?mode=cad' },
-  { id: 'upscaler', label: 'Upscaler', icon: ArrowUpCircle, isNew: false, mode: null, href: '#' },
-  { id: 'canvas', label: 'Canvas', icon: PenTool, isNew: false, mode: null, href: '#' },
-  { id: 'draw', label: 'Draw', icon: Pencil, isNew: false, mode: null, href: '#' },
+  // { id: 'upscaler', label: 'Upscaler', icon: ArrowUpCircle, isNew: false, mode: null, href: '#' },
+  // { id: 'canvas', label: 'Canvas', icon: PenTool, isNew: false, mode: null, href: '#' },
+  // { id: 'draw', label: 'Draw', icon: Pencil, isNew: false, mode: null, href: '#' },
 ];
 
 export const TOOL_TABS = TOOL_ITEMS.map(({ id, label, isNew, icon }) => ({ id, label, isNew, icon }));

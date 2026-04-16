@@ -13,49 +13,43 @@ import aiGenerators from '@/data/aiGenerators.json';
 
 const MODEL_COLORS = [COLORS.primary, COLORS.cyan, COLORS.pink, '#a78bfa', '#34d399'];
 
-export const IMAGE_MODELS = aiGenerators
-  .filter((generator) => generator.category === 'ai-generation' && generator.enabled)
-  .map((generator, index) => ({
-    id: generator.id,
-    name: generator.label,
-    tag: index === 0 ? 'Recommended' : 'AI',
-    color: MODEL_COLORS[index % MODEL_COLORS.length],
-    image: `https://picsum.photos/seed/model-${generator.id}/120/80`,
-    desc: `Prompt-based image generation via ${generator.label}.`,
-  }));
+export const IMAGE_MODELS = [
+  ...aiGenerators
+    .filter((generator) => generator.category === 'ai-generation' && generator.enabled)
+    .map((generator, index) => ({
+      id: generator.id,
+      name: generator.label,
+      tag: index === 0 ? 'Recommended' : 'AI',
+      color: MODEL_COLORS[index % MODEL_COLORS.length],
+      image: `https://picsum.photos/seed/model-${generator.id}/120/80`,
+      desc: `Prompt-based image generation via ${generator.label}.`,
+    })),
+  {
+    id: 'gemini-2.5-flash-image-preview',
+    name: 'Gemini 2.5 Flash Preview',
+    tag: 'Multi-Jewelry',
+    color: COLORS.pink,
+    image: 'https://picsum.photos/seed/model-gemini-2-5-preview/120/80',
+    desc: 'Multi-reference jewelry generation with preview capability.',
+  },
+  {
+    id: 'gemini-2.5-flash-image',
+    name: 'Gemini 2.5 Flash',
+    tag: 'Multi-Jewelry',
+    color: '#a78bfa',
+    image: 'https://picsum.photos/seed/model-gemini-2-5/120/80',
+    desc: 'Multi-reference jewelry generation with high-quality output.',
+  },
+];
 
 export const VIDEO_MODELS = [
   {
-    id: 'motion-xl',
-    name: 'Motion XL',
+    id: 'veo-3.0-fast-generate-001',
+    name: 'Veo 3.0 Fast',
     tag: 'Recommended',
     color: COLORS.cyan,
-    image: 'https://picsum.photos/seed/model-motionxl/120/80',
-    desc: 'Smooth, high-quality video generation. Best for cinematic and realistic motion.',
-  },
-  {
-    id: 'animate',
-    name: 'AnimateDiff',
-    tag: 'Smooth',
-    color: COLORS.primary,
-    image: 'https://picsum.photos/seed/model-animate/120/80',
-    desc: 'Specialises in fluid animations and character motion with consistent style.',
-  },
-  {
-    id: 'svd',
-    name: 'Stable Video Diffusion',
-    tag: 'Classic',
-    color: COLORS.pink,
-    image: 'https://picsum.photos/seed/model-svd/120/80',
-    desc: 'Reliable video model for short clips. Great for product and lifestyle content.',
-  },
-  {
-    id: 'kling',
-    name: 'Kling v1.5',
-    tag: 'Cinematic',
-    color: '#fbbf24',
-    image: 'https://picsum.photos/seed/model-kling/120/80',
-    desc: 'Cinematic-grade video with dramatic lighting and film-like colour grading.',
+    image: 'https://picsum.photos/seed/model-veo-3-fast/120/80',
+    desc: 'Fast Gemini Veo video generation model for quick high-quality results.',
   },
 ];
 

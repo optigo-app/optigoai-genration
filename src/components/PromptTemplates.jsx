@@ -473,7 +473,7 @@ export default function JewelryPromptBuilder({ open, onClose, onApply, initialPr
                                             <FieldLabel>Stone Type</FieldLabel>
                                             <FormControl fullWidth size="small">
                                                 <Select value={cfg.stone} onChange={e => update("stone", e.target.value)}>
-                                                    {OPTIONS.stone.map(o => <MenuItem key={o} value={o} sx={{ fontSize: "0.82rem" }}>{o}</MenuItem>)}
+                                                    {OPTIONS?.stone.map(o => <MenuItem key={o} value={o} sx={{ fontSize: "0.82rem" }}>{o}</MenuItem>)}
                                                 </Select>
                                             </FormControl>
                                         </Grid>
@@ -481,7 +481,7 @@ export default function JewelryPromptBuilder({ open, onClose, onApply, initialPr
                                             <FieldLabel>Clarity Grade</FieldLabel>
                                             <FormControl fullWidth size="small">
                                                 <Select value={cfg.clarity} onChange={e => update("clarity", e.target.value)}>
-                                                    {OPTIONS.clarity.map(o => <MenuItem key={o} value={o} sx={{ fontSize: "0.82rem" }}>{o}</MenuItem>)}
+                                                    {OPTIONS?.clarity.map(o => <MenuItem key={o} value={o} sx={{ fontSize: "0.82rem" }}>{o}</MenuItem>)}
                                                 </Select>
                                             </FormControl>
                                         </Grid>
@@ -495,7 +495,7 @@ export default function JewelryPromptBuilder({ open, onClose, onApply, initialPr
                                         <Grid item xs={12}>
                                             <FieldLabel>Color Grade</FieldLabel>
                                             <Stack direction="row" spacing={0.75}>
-                                                {OPTIONS.colorGrade.map(g => (
+                                                {OPTIONS?.colorGrade.map(g => (
                                                     <Chip
                                                         key={g} label={g} size="small" onClick={() => update("colorGrade", g)}
                                                         sx={{
@@ -524,7 +524,7 @@ export default function JewelryPromptBuilder({ open, onClose, onApply, initialPr
                                             <FieldLabel>Setting Style</FieldLabel>
                                             <FormControl fullWidth size="small">
                                                 <Select value={cfg.setting} onChange={e => update("setting", e.target.value)}>
-                                                    {OPTIONS.setting.map(o => <MenuItem key={o} value={o} sx={{ fontSize: "0.82rem" }}>{o}</MenuItem>)}
+                                                    {OPTIONS?.setting.map(o => <MenuItem key={o} value={o} sx={{ fontSize: "0.82rem" }}>{o}</MenuItem>)}
                                                 </Select>
                                             </FormControl>
                                         </Grid>

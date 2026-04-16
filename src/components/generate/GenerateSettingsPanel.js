@@ -1,16 +1,25 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import Slider from '@mui/material/Slider';
-import Switch from '@mui/material/Switch';
 import Divider from '@mui/material/Divider';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import InputBase from '@mui/material/InputBase';
+import IconButton from '@mui/material/IconButton';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+import Stack from '@mui/material/Stack';
+import Checkbox from '@mui/material/Checkbox';
+import Tooltip from '@mui/material/Tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, Sparkles, Gauge, Timer, ChevronRight } from 'lucide-react';
+import { RotateCcw, Sparkles, Gauge, Timer, ChevronRight, Folder, Plus, Check, X, ChevronDown, Search, HelpCircle, ExternalLink } from 'lucide-react';
 import { IMAGE_MODELS, VIDEO_MODELS } from '@/components/generate/ModelSelectPanel';
-import { COLORS, RADIUS } from '@/theme/tokens';
+import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
 
 const DIMENSIONS = [
   { label: '1:1', w: 1, h: 1 },
@@ -19,10 +28,8 @@ const DIMENSIONS = [
   { label: '9:16', w: 9, h: 16 },
 ];
 
-const IMAGE_PRESETS = ['Cinematic', 'Anime', 'Portrait', 'Sketch', 'Fantasy', 'Realistic'];
 const VIDEO_QUALITIES = ['360p', '480p', '720p', '1080p', '4K'];
 const VIDEO_DURATIONS = ['3s', '5s', '8s', '10s', '15s'];
-const VIDEO_STYLES = ['Cinematic', 'Anime', 'Slow-Mo', 'Timelapse', 'Smooth'];
 
 // ── Sub-components ──────────────────────────────────────────────────
 function SectionLabel({ icon: Icon, children }) {
@@ -49,9 +56,50 @@ function OptionChip({ label, active, onClick }) {
 function DimensionBox({ d, active, onClick }) {
   return (
     <motion.div whileHover={{ y: -1, scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-      <Box onClick={onClick} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.55, py: 1.05, borderRadius: RADIUS.sm, cursor: 'pointer', border: '1px solid', borderColor: active ? COLORS.primaryAlpha[40] : 'divider', bgcolor: active ? COLORS.primaryAlpha[12] : 'transparent', boxShadow: active ? '0 4px 14px rgba(115, 103, 240, 0.18)' : 'none', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', '&:hover': { borderColor: COLORS.primaryAlpha[40], bgcolor: COLORS.primaryAlpha[12] } }}>
-        <Box sx={{ width: d.w > d.h ? 26 : d.w === d.h ? 20 : 14, height: d.h > d.w ? 26 : d.w === d.h ? 20 : 14, border: '1.5px solid', borderColor: active ? 'primary.main' : 'text.disabled', borderRadius: '3px' }} />
-        <Typography sx={{ fontSize: '0.66rem', color: active ? 'primary.main' : 'text.secondary', fontWeight: 600 }}>{d.label}</Typography>
+      <Box
+        onClick={onClick}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 0.75,
+          py: 1.2,
+          px: 0.8,
+          borderRadius: '10px',
+          cursor: 'pointer',
+          border: '1px solid',
+          borderColor: active ? COLORS.primaryAlpha[40] : 'divider',
+          bgcolor: active ? COLORS.primaryAlpha[12] : 'transparent',
+          boxShadow: active ? '0 4px 14px rgba(115, 103, 240, 0.18)' : 'none',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          '&:hover': {
+            borderColor: COLORS.primaryAlpha[40],
+            bgcolor: COLORS.primaryAlpha[12],
+            boxShadow: '0 4px 14px rgba(115, 103, 240, 0.15)',
+          },
+        }}
+      >
+        <Box
+          sx={{
+            width: d.w > d.h ? 32 : d.w === d.h ? 24 : 18,
+            height: d.h > d.w ? 32 : d.w === d.h ? 24 : 18,
+            border: '2px solid',
+            borderColor: active ? 'primary.main' : 'text.disabled',
+            borderRadius: '4px',
+            bgcolor: active ? COLORS.primaryAlpha[8] : 'transparent',
+            transition: 'all 0.2s',
+          }}
+        />
+        <Typography
+          sx={{
+            fontSize: '0.75rem',
+            color: active ? 'primary.main' : 'text.primary',
+            fontWeight: active ? 600 : 500,
+          }}
+        >
+          {d.label}
+        </Typography>
       </Box>
     </motion.div>
   );
@@ -95,15 +143,35 @@ function ModelTrigger({ models, value, onOpen }) {
 }
 
 // ── Main panel ──────────────────────────────────────────────────────
-export default function GenerateSettingsPanel({ settings, onChange, mode = 'image', onOpenModelPanel }) {
+export default function GenerateSettingsPanel({ settings, onChange, mode = 'image', onOpenModelPanel, collections = [], onCreateCollection }) {
   const isVideo = mode === 'video';
   const update = (key, val) => onChange({ ...settings, [key]: val });
   const models = isVideo ? VIDEO_MODELS : IMAGE_MODELS;
   const defaultModel = models[0].id;
 
+  // Collection accordion state
+  const [search, setSearch] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+
+  const selectedCollection = collections?.find(c => c.id === settings.collectionId);
+
+  const handleCreateCollection = () => {
+    if (!newName.trim()) return;
+    const newCollection = { id: Date.now(), name: newName.trim(), images: [] };
+    onCreateCollection?.(newName.trim(), []);
+    update('collectionId', newCollection.id);
+    setNewName('');
+    setCreating(false);
+  };
+
+  const filteredCollections = (collections || []).filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase())
+  );
+
   const DEFAULT = {
-    dimension: '1:1', count: 1, preset: 'Cinematic', guidance: 7, addToCollection: false,
-    videoQuality: '1080p', videoDuration: '5s', videoFps: '30', videoStyle: 'Cinematic', motionStrength: 5,
+    dimension: '1:1', count: 1, collectionId: null,
+    videoQuality: '1080p', videoDuration: '5s', videoFps: '30', motionStrength: 5,
     imageModel: IMAGE_MODELS[0].id, videoModel: VIDEO_MODELS[0].id,
   };
 
@@ -168,13 +236,6 @@ export default function GenerateSettingsPanel({ settings, onChange, mode = 'imag
                   {VIDEO_DURATIONS.map((d) => <OptionChip key={d} label={d} active={settings.videoDuration === d} onClick={() => update('videoDuration', d)} />)}
                 </Box>
               </Box>
-              <Divider />
-              <Box>
-                <SectionLabel icon={Sparkles}>Video Style</SectionLabel>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.6 }}>
-                  {VIDEO_STYLES.map((s) => <OptionChip key={s} label={s} active={settings.videoStyle === s} onClick={() => update('videoStyle', s)} />)}
-                </Box>
-              </Box>
             </motion.div>
           ) : (
             <motion.div key="image" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -188,34 +249,11 @@ export default function GenerateSettingsPanel({ settings, onChange, mode = 'imag
                   ))}
                 </Box>
               </Box>
-              <Divider />
-              <Box>
-                <SectionLabel icon={Sparkles}>Preset Mode</SectionLabel>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.6 }}>
-                  {IMAGE_PRESETS.map((p) => <OptionChip key={p} label={p} active={settings.preset === p} onClick={() => update('preset', p)} />)}
-                </Box>
-              </Box>
-              <Divider />
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <SectionLabel>Guidance Scale</SectionLabel>
-                  <Typography sx={{ fontSize: '0.72rem', color: 'primary.main', fontWeight: 700 }}>{settings.guidance}</Typography>
-                </Box>
-                <Slider value={settings.guidance} onChange={(_, v) => update('guidance', v)} min={1} max={20} step={0.5} size="small" sx={{ color: 'primary.main', '& .MuiSlider-thumb': { width: 12, height: 12 } }} />
-              </Box>
             </motion.div>
           )}
         </AnimatePresence>
-
         <Divider />
-
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', fontWeight: 500 }}>Add to collection</Typography>
-          <Switch checked={settings.addToCollection} onChange={(e) => update('addToCollection', e.target.checked)} size="small" sx={{ '& .MuiSwitch-thumb': { bgcolor: settings.addToCollection ? COLORS.primary : undefined } }} />
-        </Box>
-
         <Box sx={{ flex: 1 }} />
-
         <Button variant="outlined" size="small" startIcon={<RotateCcw size={13} />} onClick={() => onChange(DEFAULT)} sx={{ borderColor: 'divider', color: 'text.secondary', fontSize: '0.73rem', fontWeight: 500, borderRadius: '9px', py: 0.65, transition: 'all 0.2s', '&:hover': { borderColor: COLORS.primaryAlpha[40], color: 'primary.main', bgcolor: COLORS.primaryAlpha[10] } }}>
           Reset to defaults
         </Button>

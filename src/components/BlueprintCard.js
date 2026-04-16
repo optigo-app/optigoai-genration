@@ -26,12 +26,9 @@ export default function BlueprintCard({ title, imageUrl, isNew, index = 0 }) {
           overflow: 'hidden',
           position: 'relative',
           cursor: 'pointer',
-          border: '1px solid',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
           bgcolor: isDark ? '#1e1e1e' : '#f8f8fa',
           transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
           '&:hover': {
-            borderColor: 'primary.main',
             boxShadow: isDark
               ? SHADOWS.cardGlow
               : '0 8px 32px rgba(192,132,252,0.15)',
@@ -52,19 +49,6 @@ export default function BlueprintCard({ title, imageUrl, isNew, index = 0 }) {
               bgcolor: isDark ? '#2a2a2a' : '#e8e8ec',
               transition: 'transform 0.3s ease',
               '&:hover': { transform: 'scale(1.06)' },
-            }}
-          />
-          {/* Gradient overlay at bottom of image */}
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '40%',
-              background: isDark
-                ? 'linear-gradient(to top, rgba(30,30,30,0.9), transparent)'
-                : 'linear-gradient(to top, rgba(248,248,250,0.9), transparent)',
             }}
           />
         </Box>
