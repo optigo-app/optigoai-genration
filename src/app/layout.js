@@ -59,15 +59,15 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body suppressHydrationWarning>
-        <AuthProvider>
-          <ThemeRegistry>
-            <ToastProvider>
-              <Suspense fallback={null}>
+        <Suspense fallback={null}>
+          <AuthProvider>
+            <ThemeRegistry>
+              <ToastProvider>
                 {children}
-              </Suspense>
-            </ToastProvider>
-          </ThemeRegistry>
-        </AuthProvider>
+              </ToastProvider>
+            </ThemeRegistry>
+          </AuthProvider>
+        </Suspense>
       </body>
     </html>
   );

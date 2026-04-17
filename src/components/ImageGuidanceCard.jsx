@@ -42,7 +42,7 @@ export default function ImageGuidanceCard({ guidanceType = "image", uploadedMedi
   } else {
     // image mode
     title = "Image Guidance";
-    
+
     if (imageUploadMode === "single") {
       description = "Upload jewelry and model images for AI generation.";
       uploadSteps = [
@@ -156,7 +156,7 @@ export default function ImageGuidanceCard({ guidanceType = "image", uploadedMedi
                 Multi Jewelry
               </ToggleButton>
             </ToggleButtonGroup>
-            
+
             {imageUploadMode === "multi" && (
               <Typography sx={{ fontSize: 11, color: p.textSecondary, textAlign: "center", fontStyle: "italic", opacity: 0.8 }}>
                 Click each category to upload multiple images
@@ -165,9 +165,9 @@ export default function ImageGuidanceCard({ guidanceType = "image", uploadedMedi
           </Box>
         )}
 
-        <Box 
-          sx={{ 
-            mt: 1.8, 
+        <Box
+          sx={{
+            mt: 1.8,
             display: "grid",
             gridTemplateColumns: guidanceType === "image" && imageUploadMode === "multi" ? "1fr 1fr" : "1fr",
             gap: 0.9,

@@ -9,8 +9,7 @@ import { motion } from 'framer-motion';
 import { TOOL_TABS } from '@/data/tools';
 import { COLORS } from '@/theme/tokens';
 
-export default function ToolTabs() {
-  const [activeTab, setActiveTab] = useState(0);
+export default function ToolTabs({ activeMode = 'image', onModeChange }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -30,13 +29,13 @@ export default function ToolTabs() {
     >
       {TOOL_TABS.map((tab, index) => {
         const Icon = tab.icon;
-        const isActive = activeTab === index;
+        const isActive = activeMode === tab.id;
         return (
           <motion.div
             key={tab.id}
             role="tab"
             aria-selected={isActive}
-            onClick={() => setActiveTab(index)}
+            onClick={() => onModeChange?.(tab.id)}
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             style={{ cursor: 'pointer', flexShrink: 0 }}

@@ -16,6 +16,7 @@ import { useTheme } from '@mui/material/styles';
 import Sidebar from '@/components/Sidebar';
 import MediaPreviewModal from '@/components/generate/MediaPreviewModal';
 import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
+import { handleDownloadFile } from '@/utils/globalFunc';
 
 function isVideoSource(src = '') {
   return /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i.test(src) || src.includes('/videos/');
@@ -296,7 +297,7 @@ export default function LibraryPage() {
                 onClick={() => setActiveTab(tab)}
                 sx={{
                   px: 2, py: 1.25, cursor: 'pointer', fontSize: '0.82rem', fontWeight: activeTab === tab ? 600 : 400,
-                  color: activeTab === tab ? 'text.primary' : 'text.disabled',
+                  color: activeTab === tab ? 'text.primary' : 'text.secondary',
                   borderBottom: '2px solid', borderColor: activeTab === tab ? 'primary.main' : 'transparent',
                   transition: 'all 0.15s', '&:hover': { color: 'text.primary' },
                 }}
@@ -501,10 +502,7 @@ export default function LibraryPage() {
                       startIcon={<Download size={13} />}
                       disabled={selectedIds.length === 0}
                       onClick={() => {
-                        selectedSrcs.forEach((src, i) => {
-                          const a = document.createElement('a');
-                          a.href = src; a.download = `library-${i + 1}.jpg`; a.click();
-                        });
+                        selectedSrcs.forEach((src) => handleDownloadFile(src));
                       }}
                       sx={{ fontSize: '0.8rem', textTransform: 'none', borderRadius: '8px', px: 1.25, py: 0.6, bgcolor: 'background.default', border: '1.5px solid', borderColor: 'divider', color: selectedIds.length > 0 ? 'text.secondary' : 'text.disabled', opacity: selectedIds.length > 0 ? 1 : 0.5, '&:hover': selectedIds.length > 0 ? { bgcolor: 'action.hover', borderColor: 'divider', color: 'text.primary' } : {}, '&.Mui-disabled': { opacity: 0.5, color: 'text.disabled' } }}
                     >
@@ -610,18 +608,18 @@ export default function LibraryPage() {
                     )}
                   </AnimatePresence>
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 1.5 }}>
-                  {filteredGenerations.map((item, i) => (
-                    <GenerationCard
-                      key={item.id}
-                      item={item}
-                      index={i}
-                      selected={selectedIds.includes(item.id)}
-                      onSelect={selectMode ? toggleSelect : () => {}}
-                      onPreview={handlePreview}
-                    />
-                  ))}
-                </Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 1.5 }}>
+                    {filteredGenerations.map((item, i) => (
+                      <GenerationCard
+                        key={item.id}
+                        item={item}
+                        index={i}
+                        selected={selectedIds.includes(item.id)}
+                        onSelect={selectMode ? toggleSelect : () => { }}
+                        onPreview={handlePreview}
+                      />
+                    ))}
+                  </Box>
                 </Box>
               </motion.div>
             ) : (

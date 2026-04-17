@@ -1,6 +1,6 @@
-const defaultLocalHosts = "localhost,nzen,optigoai.web";
+const defaultLocalHosts = "localhost,nzen,optigoai.web,optigoaistudio.web";
 
-const LOCAL_HOSTNAMES = (process.env.REACT_APP_LOCAL_HOSTNAMES || defaultLocalHosts)
+const LOCAL_HOSTNAMES = (process.env.NEXT_PUBLIC_LOCAL_HOSTNAMES || process.env.REACT_APP_LOCAL_HOSTNAMES || defaultLocalHosts)
     .split(',')
     .map(h => h.trim().toLowerCase());
 
@@ -8,8 +8,8 @@ const LOCAL_HOSTNAMES = (process.env.REACT_APP_LOCAL_HOSTNAMES || defaultLocalHo
 const isBrowser = typeof window !== 'undefined';
 
 const DOMAINS = {
-    local: process.env.BACKEND_NZEN_API_URL || "http://newnextjs.web/api/report",
-    live: process.env.BACKEND_LIVE_API_URL || "https://apilx.optigoapps.com/api/report",
+    local: process.env.BACKEND_NZEN_API_URL || process.env.NEXT_PUBLIC_BACKEND_NZEN_API_URL || "http://newnextjs.web/api/report",
+    live: process.env.BACEKND_LIVE_API_URL || process.env.BACKEND_LIVE_API_URL || process.env.NEXT_PUBLIC_BACEKND_LIVE_API_URL || process.env.NEXT_PUBLIC_BACKEND_LIVE_API_URL || "https://apilx.optigoapps.com/api/report",
 };
 
 const currentHost = isBrowser ? window.location.hostname.toLowerCase() : "";

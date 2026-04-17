@@ -170,6 +170,7 @@ export async function processMultiReferenceJewelry({
   necklaceImages,
   bangleImages,
   earingImages,
+  otherImages,
   prompt,
   maxJewelryReferences,
   geminiModel,
@@ -195,6 +196,10 @@ export async function processMultiReferenceJewelry({
 
   if (earingImages && earingImages.length > 0) {
     earingImages.forEach((file) => formData.append('earing_images', file));
+  }
+
+  if (otherImages && otherImages.length > 0) {
+    otherImages.forEach((file) => formData.append('other_images', file));
   }
 
   formData.append('prompt', prompt || '');
@@ -237,7 +242,7 @@ export async function processMultiReferenceJewelry({
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const data = await response.json();
-    const imageUrl = data?.image || data?.url || data?.result?.image || data?.result?.url || null;
+    const imageUrl = data?.output_path || data?.image || data?.url || data?.result?.image || data?.result?.url || null;
     return { type: 'json', data, imageUrl };
   }
 

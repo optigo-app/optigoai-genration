@@ -110,7 +110,7 @@ export const AuthProvider = ({ children }) => {
 
         if (typeof window !== 'undefined') {
           const hostname = window.location.hostname;
-          const isAllowedHost = hostname === 'localhost' || hostname.includes('nzen') || hostname.includes('optigoai.web');
+          const isAllowedHost = hostname === 'localhost' || hostname.includes('nzen') || hostname.includes('optigoaistudio.web');
           const isIframe = window.self !== window.top;
           const token = Cookies.get('skey');
 
@@ -125,6 +125,7 @@ export const AuthProvider = ({ children }) => {
               const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJpdGFzayIsImF1ZCI6IllXUnRhVzVBYjNKaGFXd3VZMjh1YVc0PSIsImV4cCI6MTc2NTQ0MTczOCwidWlkIjoiWVdSdGFXNUFiM0poYVd3dVkyOHVhVzQ9IiwieWMiOiJlM3R1ZW1WdWZYMTdlekl3ZlgxN2UyOXlZV2xzTWpWOWZYdDdiM0poYVd3eU5YMTkiLCJzdiI6IjAiLCJhdGsiOiJkRzlyWlc1ZlkyeHBaVzUwTVY5elpXTnlaWFJmYTJWNVh6RXlNelExIiwiY3V2ZXIiOiJSNTBCMyJ9.Kfx8ylk2omd2zmjP7SwnhN_vjcesCG83jV7M8Nr3ufU';
               const isHttps = window.location.protocol === 'https:';
               Cookies.set('skey', mockToken, isHttps ? { sameSite: 'None', secure: true } : { sameSite: 'Lax' });
+              sessionStorage.setItem('ukey', 'orail25TNBVD0LO2UFPRZ4YH_Image');
 
               let params = null;
               const authQueryParams = sessionStorage.getItem('AuthqueryParams');

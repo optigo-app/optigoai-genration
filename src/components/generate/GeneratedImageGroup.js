@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
@@ -14,6 +14,15 @@ import MediaPreviewModal from './MediaPreviewModal';
 import Tooltip from '@mui/material/Tooltip';
 import { COLORS, SHADOWS } from '@/theme/tokens';
 import { useConfirmation } from '@/hooks/useConfirmation';
+import { handleDownloadFile } from '@/utils/globalFunc';
+
+const loadingTexts = [
+  'Generating your masterpiece...',
+  'Applying AI magic...',
+  'Rendering pixels...',
+  'Almost there...',
+  'Finalizing the image...'
+];
 
 function GeneratedImageGroup({ date, prompt, images, referenceImages = [], tags = [], isGenerating = false, count = 1, dimension = '1:1', onAction, selectedImages = [], onSelect }) {
   const theme = useTheme();
@@ -26,8 +35,23 @@ function GeneratedImageGroup({ date, prompt, images, referenceImages = [], tags 
   const [feedbackType, setFeedbackType] = useState(null); // 'like' | 'dislike' | null
   const feedbackOpen = Boolean(feedbackAnchorEl);
   const [copied, setCopied] = useState(false);
+  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
+  const hasPrompt = Boolean(prompt?.trim());
 
   const aspectRatio = dimension === '16:9' ? '16/9' : dimension === '9:16' ? '9/16' : '1/1';
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setLoadingTextIndex(0);
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setLoadingTextIndex((prev) => (prev + 1) % loadingTexts.length);
+    }, 1700);
+
+    return () => clearInterval(intervalId);
+  }, [isGenerating]);
 
   return (
     <motion.div
@@ -61,7 +85,7 @@ function GeneratedImageGroup({ date, prompt, images, referenceImages = [], tags 
             >
               {isGenerating
                 ? Array.from({ length: count }).map((_, i) => (
-                    <GeneratingCard key={i} index={i} aspectRatio={aspectRatio} />
+                    <GeneratingCard key={i} index={i} aspectRatio={aspectRatio} loadingText={loadingTexts[loadingTextIndex]} />
                   ))
                 : images.map((img, i) => (
                     <GeneratedImageCard
@@ -96,51 +120,53 @@ function GeneratedImageGroup({ date, prompt, images, referenceImages = [], tags 
               }}
             >
               {/* Prompt text */}
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Prompt
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
-                  <Box sx={{ flex: 1, display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
-                    <Typography
-                      sx={{
-                        fontSize: '0.78rem',
-                        fontWeight: 400,
-                        color: 'text.secondary',
-                        lineHeight: 1.65,
-                        flex: 1,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 5,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {prompt}
-                    </Typography>
-                    <Tooltip title={copied ? "Copied!" : "Copy prompt"} arrow>
-                      <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.15 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            navigator.clipboard.writeText(prompt);
-                            setCopied(true);
-                            setTimeout(() => setCopied(false), 2000);
-                          }}
-                          sx={{
-                            bgcolor: copied ? `${COLORS.primary}22` : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
-                            color: copied ? COLORS.primary : 'text.secondary',
-                            flexShrink: 0,
-                            p: 0.5,
-                            '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', color: 'text.primary' },
-                          }}
-                        >
-                          {copied ? <Check size={14} /> : <Copy size={14} />}
-                        </IconButton>
-                      </motion.div>
-                    </Tooltip>
+              {hasPrompt && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Prompt
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+                    <Box sx={{ flex: 1, display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.78rem',
+                          fontWeight: 400,
+                          color: 'text.secondary',
+                          lineHeight: 1.65,
+                          flex: 1,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 5,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {prompt}
+                      </Typography>
+                      <Tooltip title={copied ? "Copied!" : "Copy prompt"} arrow>
+                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.15 }}>
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              navigator.clipboard.writeText(prompt);
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 2000);
+                            }}
+                            sx={{
+                              bgcolor: copied ? `${COLORS.primary}22` : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+                              color: copied ? COLORS.primary : 'text.secondary',
+                              flexShrink: 0,
+                              p: 0.5,
+                              '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', color: 'text.primary' },
+                            }}
+                          >
+                            {copied ? <Check size={14} /> : <Copy size={14} />}
+                          </IconButton>
+                        </motion.div>
+                      </Tooltip>
+                    </Box>
                   </Box>
                 </Box>
-              </Box>
+              )}
 
               {/* Reference images */}
               {referenceImages && referenceImages.length > 0 && (
@@ -212,7 +238,7 @@ function GeneratedImageGroup({ date, prompt, images, referenceImages = [], tags 
                     <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.15 }}>
                       <IconButton
                         size="small"
-                        onClick={() => onAction?.('download', images)}
+                        onClick={() => images.forEach(img => handleDownloadFile(img))}
                         sx={{
                           bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
                           color: 'text.secondary',

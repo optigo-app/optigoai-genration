@@ -1,0 +1,83 @@
+[
+  {
+    "id": 1776400482706,
+    "date": "Friday, April 17, 2026",
+    "prompt": "",
+    "images": [
+      "blob:http://localhost:5006/f8c9ab98-b09a-47ff-9ad6-2e06cb4dde96"
+    ],
+    "referenceImages": [
+      "/uploads/history/ref-1776400482706-0-1776400483272-790.jpg"
+    ],
+    "tags": [
+      "sketch",
+      "1:1"
+    ],
+    "dimension": "1:1"
+  },
+  {
+    "id": 1776346365832,
+    "date": "Thursday, April 16, 2026",
+    "prompt": "edfdsfsdf",
+    "images": [
+      "http://157.20.172.176:8001/generated/gemini-2_5-flash-image-preview_20260416_130525.jpg"
+    ],
+    "referenceImages": [
+      "blob:http://localhost:5006/1e6692a4-81ac-46fc-90c6-a330e5b5e568",
+      "blob:http://localhost:5006/19a1dc8f-b970-42fc-831a-7b492bf92af5"
+    ],
+    "tags": [
+      "gemini-2.5-flash-image-preview",
+      "multi-jewelry",
+      "1:1"
+    ],
+    "dimension": "1:1"
+  },
+  {
+    "id": 1,
+    "date": "Monday, 03 February 2025",
+    "prompt": "A young woman with a warm smile sitting in a cozy café, natural lighting, photorealistic, 8k resolution",
+    "images": [
+      "https://picsum.photos/seed/gen1/400/500"
+    ],
+    "tags": [
+      "photorealistic",
+      "portrait",
+      "cinematic"
+    ],
+    "dimension": "1:1"
+  },
+  {
+    "id": 2,
+    "date": "Sunday, 11 January 2026",
+    "prompt": "Traditional Indian devotional art featuring Rama, Sita, Lakshmana and Hanuman in classical painting style",
+    "images": [
+      "https://picsum.photos/seed/gen2/400/500",
+      "https://picsum.photos/seed/gen3/400/500",
+      "https://picsum.photos/seed/gen4/400/500"
+    ],
+    "tags": [
+      "traditional",
+      "painting",
+      "devotional"
+    ],
+    "dimension": "1:1"
+  },
+  {
+    "id": 3,
+    "date": "Sunday, 29 August 2025",
+    "prompt": "A logo for StoryVoice India, a storytelling brand, elegant typography with cultural motifs",
+    "images": [
+      "https://picsum.photos/seed/gen5/400/300",
+      "https://picsum.photos/seed/gen6/400/300",
+      "https://picsum.photos/seed/gen7/400/300",
+      "https://picsum.photos/seed/gen8/400/300"
+    ],
+    "tags": [
+      "logo",
+      "branding",
+      "typography"
+    ],
+    "dimension": "4:3"
+  }
+]

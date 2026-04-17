@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Box from '@mui/material/Box';
 import { motion } from 'framer-motion';
 import { useTheme } from '@mui/material/styles';
@@ -78,6 +79,7 @@ function AnimatedHeadline({ isDark }) {
 }
 
 export default function HeroSection() {
+  const [mode, setMode] = useState('image');
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -127,7 +129,7 @@ export default function HeroSection() {
         transition={{ duration: 0.45, delay: 0.2, ease: 'easeOut' }}
         style={{ width: '100%', maxWidth: 840 }}
       >
-        <PromptBar redirectToGenerate />
+        <PromptBar redirectToGenerate mode={mode} />
       </motion.div>
 
       <motion.div
@@ -136,7 +138,7 @@ export default function HeroSection() {
         transition={{ duration: 0.4, delay: 0.35, ease: 'easeOut' }}
         style={{ width: '100%', maxWidth: 780, marginTop: 14 }}
       >
-        <ToolTabs />
+        <ToolTabs activeMode={mode} onModeChange={setMode} />
       </motion.div>
     </Box>
   );

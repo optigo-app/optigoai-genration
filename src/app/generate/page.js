@@ -17,35 +17,12 @@ import DesignCollectionPanel from '@/components/generate/DesignCollectionPanel';
 import ModelSelectPanel, { IMAGE_MODELS, VIDEO_MODELS } from '@/components/generate/ModelSelectPanel';
 import ImageEditWorkspace from '@/components/generate/ImageEditWorkspace';
 import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
+import { handleDownloadFile } from '@/utils/globalFunc';
 import { fileFromImageUrl, processSketchImage, processImageDynamicPrompt, processGeminiVideoGenerate, processMultiReferenceJewelry } from '@/utils/processServices';
+import { fileToBase64 } from '@/utils/historyUtils';
 import { IconButton, Tooltip, useTheme } from '@mui/material';
 
-const SAMPLE_HISTORY = [
-  {
-    id: 1,
-    date: 'Monday, 03 February 2025',
-    prompt: 'A young woman with a warm smile sitting in a cozy café, natural lighting, photorealistic, 8k resolution',
-    images: ['https://picsum.photos/seed/gen1/400/500'],
-    tags: ['photorealistic', 'portrait', 'cinematic'],
-    dimension: '1:1',
-  },
-  {
-    id: 2,
-    date: 'Sunday, 11 January 2026',
-    prompt: 'Traditional Indian devotional art featuring Rama, Sita, Lakshmana and Hanuman in classical painting style',
-    images: ['https://picsum.photos/seed/gen2/400/500', 'https://picsum.photos/seed/gen3/400/500', 'https://picsum.photos/seed/gen4/400/500'],
-    tags: ['traditional', 'painting', 'devotional'],
-    dimension: '1:1',
-  },
-  {
-    id: 3,
-    date: 'Sunday, 29 August 2025',
-    prompt: 'A logo for StoryVoice India, a storytelling brand, elegant typography with cultural motifs',
-    images: ['https://picsum.photos/seed/gen5/400/300', 'https://picsum.photos/seed/gen6/400/300', 'https://picsum.photos/seed/gen7/400/300', 'https://picsum.photos/seed/gen8/400/300'],
-    tags: ['logo', 'branding', 'typography'],
-    dimension: '4:3',
-  },
-];
+
 
 const DEFAULT_SETTINGS = {
   dimension: '1:1', count: 1, preset: 'Cinematic', guidance: 7, addToCollection: false,
@@ -77,12 +54,15 @@ export default function GeneratePage() {
     if (searchParams.get('from') === 'home') {
       const savedPrompt = sessionStorage.getItem('home_prompt');
       const savedImages = sessionStorage.getItem('home_images');
+      const savedMode = sessionStorage.getItem('home_upload_mode');
       if (savedPrompt) setPrompt(savedPrompt);
       if (savedImages) {
         try { setUploadedImages(JSON.parse(savedImages)); } catch { }
       }
+      if (savedMode) setImageUploadMode(savedMode);
       sessionStorage.removeItem('home_prompt');
       sessionStorage.removeItem('home_images');
+      sessionStorage.removeItem('home_upload_mode');
     }
   }, []);
 
@@ -109,8 +89,24 @@ export default function GeneratePage() {
     }
   }, [imageUploadMode]);
 
+  // Fetch history from local API
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const response = await fetch('/api/history');
+        if (response.ok) {
+          const data = await response.json();
+          setHistory(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch history:', error);
+      }
+    };
+    fetchHistory();
+  }, []);
+
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [history, setHistory] = useState(SAMPLE_HISTORY);
+  const [history, setHistory] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState('');
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -124,6 +120,27 @@ export default function GeneratePage() {
   const [editSelectedPrompt, setEditSelectedPrompt] = useState('');
   const canGenerate = mode === 'sketch' ? uploadedImages.length > 0 : undefined;
   const uploadAccept = mode === 'video' ? 'image/*,video/*' : 'image/*';
+
+  const saveHistory = async (newItem) => {
+    try {
+      // Convert reference image blob URLs to base64 for persistence
+      if (newItem.referenceImages && newItem.referenceImages.length > 0) {
+        newItem.referenceImages = await Promise.all(
+          newItem.referenceImages.map(url => fileToBase64(url))
+        );
+      }
+
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newItem),
+      });
+    } catch (error) {
+      console.error('Failed to save to history file:', error);
+    }
+  };
 
   const handleToggleCollection = (colId, images) => {
     setCollections((prev) => prev.map((c) => {
@@ -159,10 +176,7 @@ export default function GeneratePage() {
 
   const handleSelectionAction = (actionId) => {
     if (actionId === 'download') {
-      selectedImages.forEach((src, i) => {
-        const a = document.createElement('a');
-        a.href = src; a.download = `image-${i + 1}.jpg`; a.click();
-      });
+      selectedImages.forEach((src) => handleDownloadFile(src));
     } else if (actionId === 'delete') {
       setHistory((prev) => prev.map((g) => ({ ...g, images: g.images.filter((img) => !selectedImages.includes(img)) })).filter((g) => g.images.length > 0));
       setSelectedImages([]);
@@ -294,7 +308,7 @@ export default function GeneratePage() {
         const result = await processSketchImage(file);
         const sketchImageUrl = result.imageUrl || sourceImage.url;
 
-        setHistory((prev) => [{
+        const newHistoryItem = {
           id: Date.now(),
           date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
           prompt: activePrompt,
@@ -302,7 +316,9 @@ export default function GeneratePage() {
           referenceImages: uploadedImages.map(img => img.url),
           tags: ['sketch', settings.dimension],
           dimension: settings.dimension,
-        }, ...prev]);
+        };
+        setHistory((prev) => [newHistoryItem, ...prev]);
+        saveHistory(newHistoryItem);
 
         setPrompt('');
         return;
@@ -327,7 +343,7 @@ export default function GeneratePage() {
           throw new Error('Video generation succeeded but no video URL was returned.');
         }
 
-        setHistory((prev) => [{
+        const newHistoryItem = {
           id: Date.now(),
           date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
           prompt: activePrompt,
@@ -335,7 +351,9 @@ export default function GeneratePage() {
           referenceImages: uploadedImages.map(img => img.url),
           tags: [modelId, 'video', settings.dimension, `${durationSeconds}s`].filter(Boolean),
           dimension: settings.dimension,
-        }, ...prev]);
+        };
+        setHistory((prev) => [newHistoryItem, ...prev]);
+        saveHistory(newHistoryItem);
 
         setPrompt('');
         return;
@@ -346,18 +364,25 @@ export default function GeneratePage() {
 
         // Check if using a multi-jewelry model or in multi-jewelry mode
         const isMultiJewelryModel = modelId === 'gemini-2.5-flash-image-preview' || modelId === 'gemini-2.5-flash-image';
-        const useMultiJewelryApi = isMultiJewelryModel || (imageUploadMode === 'multi' && uploadedImages.length >= 6);
+        const useMultiJewelryApi = isMultiJewelryModel || (imageUploadMode === 'multi' && uploadedImages.length > 1);
 
         if (useMultiJewelryApi) {
-          // Multi-jewelry mode: index 0 = model, 1 = rings, 2 = necklaces, 3 = bangles, 4 = earrings, 5 = other
-          const modelImage = uploadedImages[0];
-          const ringImages = uploadedImages[1] ? [await fileFromImageUrl(uploadedImages[1].url, 'ring.jpg')] : [];
-          const necklaceImages = uploadedImages[2] ? [await fileFromImageUrl(uploadedImages[2].url, 'necklace.jpg')] : [];
-          const bangleImages = uploadedImages[3] ? [await fileFromImageUrl(uploadedImages[3].url, 'bangle.jpg')] : [];
-          const earingImages = uploadedImages[4] ? [await fileFromImageUrl(uploadedImages[4].url, 'earing.jpg')] : [];
-          const otherImages = uploadedImages[5] ? [await fileFromImageUrl(uploadedImages[5].url, 'other.jpg')] : [];
+          // Multi-jewelry mode: Categorize images based on their category property
+          const modelImg = uploadedImages.find(img => img.category === 'model') || uploadedImages[0];
+          const jewelryItems = uploadedImages;
+          const ringImgs = jewelryItems.filter(img => img.category === 'ring');
+          const necklaceImgs = jewelryItems.filter(img => img.category === 'necklace');
+          const bangleImgs = jewelryItems.filter(img => img.category === 'bangle');
+          const earingImgs = jewelryItems.filter(img => img.category === 'earring');
+          const otherImgs = jewelryItems.filter(img => img.category === 'other' || !img.category);
 
-          const modelFile = await fileFromImageUrl(modelImage.url, modelImage.name || 'model.jpg');
+          const ringImages = await Promise.all(ringImgs.map(img => fileFromImageUrl(img.url, img.name || 'ring.jpg')));
+          const necklaceImages = await Promise.all(necklaceImgs.map(img => fileFromImageUrl(img.url, img.name || 'necklace.jpg')));
+          const bangleImages = await Promise.all(bangleImgs.map(img => fileFromImageUrl(img.url, img.name || 'bangle.jpg')));
+          const earingImages = await Promise.all(earingImgs.map(img => fileFromImageUrl(img.url, img.name || 'earing.jpg')));
+          const otherImages = await Promise.all(otherImgs.map(img => fileFromImageUrl(img.url, img.name || 'other.jpg')));
+
+          const modelFile = await fileFromImageUrl(modelImg.url, modelImg.name || 'model.jpg');
 
           const result = await processMultiReferenceJewelry({
             modelImage: modelFile,
@@ -365,14 +390,15 @@ export default function GeneratePage() {
             necklaceImages,
             bangleImages,
             earingImages,
+            otherImages,
             prompt: activePrompt,
             geminiModel: modelId,
-            maxJewelryReferences: 10,
+            maxJewelryReferences: jewelryItems.length,
           });
 
-          const generatedImageUrl = result.imageUrl || modelImage.url;
+          const generatedImageUrl = result.imageUrl || modelImg.url;
 
-          setHistory((prev) => [{
+          const newHistoryItem = {
             id: Date.now(),
             date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
             prompt: activePrompt,
@@ -380,7 +406,9 @@ export default function GeneratePage() {
             referenceImages: uploadedImages.map(img => img.url),
             tags: [modelId, 'multi-jewelry', settings.dimension].filter(Boolean),
             dimension: settings.dimension,
-          }, ...prev]);
+          };
+          setHistory((prev) => [newHistoryItem, ...prev]);
+          saveHistory(newHistoryItem);
 
           setPrompt('');
           return;
@@ -396,9 +424,11 @@ export default function GeneratePage() {
           modelId,
         });
 
+        console.log("result", result);
+
         const generatedImageUrl = result.imageUrl || sourceImage.url;
 
-        setHistory((prev) => [{
+        const newHistoryItem = {
           id: Date.now(),
           date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
           prompt: activePrompt,
@@ -406,7 +436,9 @@ export default function GeneratePage() {
           referenceImages: uploadedImages.map(img => img.url),
           tags: [modelId, 'image', settings.dimension].filter(Boolean),
           dimension: settings.dimension,
-        }, ...prev]);
+        };
+        setHistory((prev) => [newHistoryItem, ...prev]);
+        saveHistory(newHistoryItem);
 
         setPrompt('');
         return;
@@ -417,14 +449,17 @@ export default function GeneratePage() {
         const seeds = Array.from({ length: settings.count }, (_, i) =>
           `https://picsum.photos/seed/${Date.now() + i}/400/${h}`
         );
-        setHistory((prev) => [{
+        const newHistoryItem = {
           id: Date.now(),
           date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
-          prompt: activePrompt, images: seeds,
+          prompt: activePrompt,
+          images: seeds,
           referenceImages: uploadedImages.map(img => img.url),
           tags: [settings.preset?.toLowerCase(), mode, settings.dimension].filter(Boolean),
           dimension: settings.dimension,
-        }, ...prev]);
+        };
+        setHistory((prev) => [newHistoryItem, ...prev]);
+        saveHistory(newHistoryItem);
         setPrompt('');
       }, 2200);
     } catch (error) {

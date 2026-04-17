@@ -9,10 +9,11 @@ import Tooltip from '@mui/material/Tooltip';
 import Popover from '@mui/material/Popover';
 import { useTheme } from '@mui/material/styles';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ImagePlus, X, Zap, Sparkles } from 'lucide-react';
+import { ImagePlus, X, Zap, Sparkles, Settings } from 'lucide-react';
 import ImageLightbox from '@/components/ImageLightbox';
 import JewelryPromptBuilder from '@/components/PromptTemplates';
 import ImageGuidanceCard from '@/components/ImageGuidanceCard';
+import ReferenceCategorizationModal from '@/components/generate/ReferenceCategorizationModal';
 import { COLORS, ANIM, RADIUS, SHADOWS, palette } from '@/theme/tokens';
 import { useConfirmation } from '@/hooks/useConfirmation';
 
@@ -38,6 +39,7 @@ export default function PromptInput({
   const [promptBuilderOpen, setPromptBuilderOpen] = useState(false);
   const [guidanceAnchorEl, setGuidanceAnchorEl] = useState(null);
   const [uploadSlotIndex, setUploadSlotIndex] = useState(null);
+  const [categorizationModalOpen, setCategorizationModalOpen] = useState(false);
   const [draftValue, setDraftValue] = useState(value);
   const fileInputRef = useRef(null);
   const theme = useTheme();
@@ -63,7 +65,7 @@ export default function PromptInput({
   }, [placeholder]);
 
   useEffect(() => {
-    if (draftValue.trim() || placeholderSuggestions.length < 2) return;
+    if (draftValue.length > 0 || placeholderSuggestions.length < 2) return;
 
     const timer = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % placeholderSuggestions.length);
@@ -74,10 +76,17 @@ export default function PromptInput({
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files || []);
+    
+    const categoryMapping = ['model', 'ring', 'necklace', 'bangle', 'earring', 'other'];
+    const defaultCategory = imageUploadMode === 'single' ? 'other' : null;
+
     const newImgs = files.map((f) => ({
       id: `${f.name}-${Date.now()}-${Math.random()}`,
       url: URL.createObjectURL(f),
       name: f.name,
+      category: (uploadSlotIndex !== null && uploadSlotIndex < categoryMapping.length) 
+        ? categoryMapping[uploadSlotIndex] 
+        : defaultCategory,
     }));
 
     if (uploadSlotIndex !== null && uploadSlotIndex >= 0) {
@@ -284,7 +293,7 @@ export default function PromptInput({
 
             <Box sx={{ position: 'relative', flex: 1, minHeight: 24, display: 'flex', alignItems: 'center', pt: 0.4 }}>
               <AnimatePresence mode="wait" initial={false}>
-                {!draftValue.trim() && (
+                {draftValue.length === 0 && (
                   <motion.span
                     key={placeholderSuggestions[placeholderIndex]}
                     initial={{ opacity: 0, y: 6 }}
@@ -432,12 +441,36 @@ export default function PromptInput({
                   ))}
                 </AnimatePresence>
 
-                {uploadedImages.length > 1 && (
+                {uploadedImages.length > 0 && (
                   <Box
                     onClick={() => confirm('clearAllUploads', () => onImagesChange?.([]))}
                     sx={{ px: 0.75, py: 0.25, borderRadius: RADIUS.xs, border: '1px dashed', borderColor: p.borderMid, cursor: 'pointer', color: 'text.disabled', fontSize: '0.62rem', '&:hover': { color: COLORS.primary, borderColor: COLORS.primary } }}
                   >
                     Clear all
+                  </Box>
+                )}
+
+                {imageUploadMode === 'multi' && uploadedImages.length > 0 && (
+                  <Box
+                    onClick={() => setCategorizationModalOpen(true)}
+                    sx={{ 
+                      px: 0.75, 
+                      py: 0.25, 
+                      borderRadius: RADIUS.xs, 
+                      border: '1px solid', 
+                      borderColor: COLORS.primaryAlpha[30], 
+                      cursor: 'pointer', 
+                      color: COLORS.primary, 
+                      fontSize: '0.62rem', 
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      bgcolor: COLORS.primaryAlpha[10],
+                      '&:hover': { bgcolor: COLORS.primaryAlpha[18], borderColor: COLORS.primary } 
+                    }}
+                  >
+                    <Settings size={10} />
+                    Categorize
                   </Box>
                 )}
               </Box>
@@ -494,6 +527,12 @@ export default function PromptInput({
         onClose={() => setLightboxOpen(false)}
         onRemove={removeImage}
         onAddMore={() => { setLightboxOpen(false); setTimeout(() => fileInputRef.current?.click(), 100); }}
+      />
+      <ReferenceCategorizationModal
+        open={categorizationModalOpen}
+        onClose={() => setCategorizationModalOpen(false)}
+        images={uploadedImages}
+        onUpdateImages={onImagesChange}
       />
       <ConfirmationComponent />
     </>
