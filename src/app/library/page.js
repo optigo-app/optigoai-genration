@@ -17,6 +17,8 @@ import Sidebar from '@/components/Sidebar';
 import MediaPreviewModal from '@/components/generate/MediaPreviewModal';
 import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
 import { handleDownloadFile } from '@/utils/globalFunc';
+import { fetchAndNormalizeHistory } from '@/utils/historyServices';
+import { LibraryCardSkeleton } from '@/components/common/SkeletonLoaders';
 
 function isVideoSource(src = '') {
   return /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i.test(src) || src.includes('/videos/');
@@ -179,10 +181,18 @@ function GenerationCard({ item, selected, onSelect, index, onPreview }) {
   );
 }
 
+// Helper to keep static samples as fallback if API fails
+const STATIC_SAMPLES = [
+  { id: 'g1', src: 'https://picsum.photos/seed/gen1/400/500', prompt: 'Cinematic portrait of a young woman', type: 'image', date: 'Monday, 03 Feb 2025' },
+  { id: 'g9', src: 'https://picsum.photos/seed/gen9/400/500', prompt: 'Cinematic video scene', type: 'video', date: 'Monday, 03 Feb 2025' },
+];
+
 // ── Main page ────────────────────────────────────────────────────────
 export default function LibraryPage() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const [generations, setGenerations] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Your Generations');
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectMode, setSelectMode] = useState(false);
@@ -217,6 +227,17 @@ export default function LibraryPage() {
     }
   }, [moveToColOpen]);
 
+  // Fetch live history on mount
+  useEffect(() => {
+    const fetchHistory = async () => {
+      setIsLoading(true);
+      const data = await fetchAndNormalizeHistory();
+      setGenerations(data.length > 0 ? data : STATIC_SAMPLES);
+      setIsLoading(false);
+    };
+    fetchHistory();
+  }, []);
+
   const handlePreview = (src) => {
     const allSrcs = filteredGenerations.map((g) => g.src);
     const idx = allSrcs.indexOf(src);
@@ -225,13 +246,15 @@ export default function LibraryPage() {
     setPreviewOpen(true);
   };
 
-  const filteredGenerations = ALL_GENERATIONS
+  const filteredGenerations = generations
     .filter((g) => typeFilter === 'all' || g.type === typeFilter)
     .filter((g) => searchQuery === '' || g.prompt.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
-      if (sortBy === 'newest') return 0; // Already sorted by index
-      if (sortBy === 'oldest') return 0;
-      if (sortBy === 'name') return a.prompt.localeCompare(b.prompt);
+      const timeA = a.timestamp || new Date(a.date).getTime() || 0;
+      const timeB = b.timestamp || new Date(b.date).getTime() || 0;
+      if (sortBy === 'newest') return timeB - timeA;
+      if (sortBy === 'oldest') return timeA - timeB;
+      if (sortBy === 'name') return (a.prompt || "").localeCompare(b.prompt || "");
       return 0;
     });
 
@@ -242,7 +265,7 @@ export default function LibraryPage() {
     setCreatingCollection(false);
   };
 
-  const selectedSrcs = ALL_GENERATIONS.filter((g) => selectedIds.includes(g.id)).map((g) => g.src);
+  const selectedSrcs = generations.filter((g) => selectedIds.includes(g.id)).map((g) => g.src);
 
   const handleMoveToCollection = (colId) => {
     setCollections((prev) => prev.map((c) => {
@@ -608,18 +631,22 @@ export default function LibraryPage() {
                     )}
                   </AnimatePresence>
 
-                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 1.5 }}>
-                    {filteredGenerations.map((item, i) => (
-                      <GenerationCard
-                        key={item.id}
-                        item={item}
-                        index={i}
-                        selected={selectedIds.includes(item.id)}
-                        onSelect={selectMode ? toggleSelect : () => { }}
-                        onPreview={handlePreview}
-                      />
-                    ))}
-                  </Box>
+                  {isLoading ? (
+                    <LibraryCardSkeleton />
+                  ) : (
+                    <Box sx={{ columns: 5, columnGap: 1.5, '& > *': { breakInside: 'avoid', mb: 1.5 } }}>
+                      {filteredGenerations.map((item, i) => (
+                        <GenerationCard
+                          key={item.id}
+                          item={item}
+                          index={i}
+                          selected={selectedIds.includes(item.id)}
+                          onSelect={selectMode ? toggleSelect : () => { }}
+                          onPreview={handlePreview}
+                        />
+                      ))}
+                    </Box>
+                  )}
                 </Box>
               </motion.div>
             ) : (

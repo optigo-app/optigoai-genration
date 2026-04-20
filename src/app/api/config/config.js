@@ -43,5 +43,6 @@ export const getHeaders = (init = {}) => {
         Version: AuthData?.cuver ?? init.version ?? "R50B3",
         sv: AuthData?.sv ?? "0",
         sp: "63",
+        ukey: typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('ukey') || "") : "",
     };
 };

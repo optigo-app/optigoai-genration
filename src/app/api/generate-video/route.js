@@ -43,10 +43,20 @@ export async function POST(request) {
         }
         console.log("getApiUrl('/generate-video')", getApiUrl('/generate-video'));
         const authHeader = request.headers.get('authorization');
+
+        // Collect session headers to forward
+        const sessionHeaders = {
+            Yearcode: request.headers.get('yearcode'),
+            Version: request.headers.get('version'),
+            sv: request.headers.get('sv'),
+            sp: request.headers.get('sp'),
+            ukey: request.headers.get('ukey'),
+        };
+
         const response = await fetch(getApiUrl('/generate-video'), {
             method: 'POST',
             body: thirdPartyFormData,
-            headers: getApiHeaders(authHeader),
+            headers: getApiHeaders(authHeader, sessionHeaders),
         });
 
         console.log('response', response);

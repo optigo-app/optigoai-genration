@@ -1,21 +1,36 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
-import Popover from '@mui/material/Popover';
+import Dialog from '@mui/material/Dialog';
+import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ImagePlus, X, Zap, Sparkles, Settings } from 'lucide-react';
+import { ImagePlus, X, Zap, Sparkles, Settings, UploadCloud } from 'lucide-react';
 import ImageLightbox from '@/components/ImageLightbox';
 import JewelryPromptBuilder from '@/components/PromptTemplates';
 import ImageGuidanceCard from '@/components/ImageGuidanceCard';
 import ReferenceCategorizationModal from '@/components/generate/ReferenceCategorizationModal';
 import { COLORS, ANIM, RADIUS, SHADOWS, palette } from '@/theme/tokens';
 import { useConfirmation } from '@/hooks/useConfirmation';
+import toast from 'react-hot-toast';
+
+const Transition = React.forwardRef(function Transition(props, ref) {
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9, y: 20 }}
+      transition={{ type: "spring", damping: 25, stiffness: 300 }}
+      {...props}
+    />
+  );
+});
 
 export default function PromptInput({
   value = '',
@@ -37,9 +52,12 @@ export default function PromptInput({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [promptBuilderOpen, setPromptBuilderOpen] = useState(false);
-  const [guidanceAnchorEl, setGuidanceAnchorEl] = useState(null);
+  const [guidanceOpen, setGuidanceOpen] = useState(false);
   const [uploadSlotIndex, setUploadSlotIndex] = useState(null);
   const [categorizationModalOpen, setCategorizationModalOpen] = useState(false);
+  const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+  const [isOverDropZone, setIsOverDropZone] = useState(false);
+  const dragCounter = useRef(0);
   const [draftValue, setDraftValue] = useState(value);
   const fileInputRef = useRef(null);
   const theme = useTheme();
@@ -47,7 +65,8 @@ export default function PromptInput({
   const p = palette(isDark);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const isGenerateEnabled = typeof canGenerate === 'boolean' ? canGenerate : Boolean(draftValue.trim());
-  const shouldStackActions = draftValue.trim().length > 90;
+  const isPromptlessMode = mode === 'sketch' || mode === 'cad';
+  const shouldStackActions = !isPromptlessMode && draftValue.trim().length > 90;
   const { confirm, ConfirmationComponent } = useConfirmation();
 
   useEffect(() => {
@@ -57,9 +76,12 @@ export default function PromptInput({
   const placeholderSuggestions = useMemo(() => {
     const suggestions = [
       placeholder,
-      'A cinematic portrait with soft rim lighting',
-      'A futuristic city skyline at sunrise',
-      'Minimal product shot on a clean background',
+      "Luxury diamond ring glowing under soft studio lighting.",
+      "Elegant gold necklace displayed on a dark velvet background.",
+      "Sparkling diamond earrings with dramatic lighting.",
+      "Minimalist silver bracelet on a clean white background.",
+      "Premium jewelry set with soft reflections and luxury feel.",
+      "Close-up macro shot of a diamond ring with brilliant sparkle.",
     ];
     return [...new Set(suggestions.filter(Boolean))];
   }, [placeholder]);
@@ -74,18 +96,91 @@ export default function PromptInput({
     return () => clearInterval(timer);
   }, [draftValue, placeholderSuggestions]);
 
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files || []);
-    
-    const categoryMapping = ['model', 'ring', 'necklace', 'bangle', 'earring', 'other'];
-    const defaultCategory = imageUploadMode === 'single' ? 'other' : null;
+  useEffect(() => {
+    const handleWindowDragOver = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (guidanceOpen) return;
+      if (e.dataTransfer.types.includes('Files')) {
+        setIsGlobalDragging(true);
+      }
+    };
 
-    const newImgs = files.map((f) => ({
+    const handleWindowDragEnter = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (guidanceOpen) return;
+      if (e.dataTransfer.types.includes('Files')) {
+        dragCounter.current++;
+        setIsGlobalDragging(true);
+      }
+    };
+
+    const handleWindowDragLeave = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current--;
+      if (dragCounter.current <= 0) {
+        setIsGlobalDragging(false);
+        dragCounter.current = 0;
+      }
+    };
+
+    const handleWindowDrop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsGlobalDragging(false);
+      setIsOverDropZone(false);
+      dragCounter.current = 0;
+      // Note: We don't handle files here anymore, only on the explicit target box
+    };
+
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('dragenter', handleWindowDragEnter);
+    window.addEventListener('dragleave', handleWindowDragLeave);
+    window.addEventListener('drop', handleWindowDrop);
+
+    return () => {
+      window.removeEventListener('dragover', handleWindowDragOver);
+      window.removeEventListener('dragenter', handleWindowDragEnter);
+      window.removeEventListener('dragleave', handleWindowDragLeave);
+      window.removeEventListener('drop', handleWindowDrop);
+    };
+  }, [imageUploadMode, uploadedImages]); // Re-bind if dependencies of handleFilesDrop change
+
+  const handleFilesDrop = (droppedFiles) => {
+    const files = Array.from(droppedFiles || []);
+    if (files.length === 0) return;
+
+    if (uploadedImages.length >= 6) {
+      toast.error('Maximum of 6 reference images allowed');
+      return;
+    }
+
+    // Category mapping based on upload mode and slot index
+    // Single mode: ['jewelry', 'model'] matches ImageGuidanceCard uploadSteps
+    // Multi mode: ['model', 'ring', 'necklace', 'bangle', 'earring', 'other'] matches ImageGuidanceCard uploadSteps
+    const categoryMapping = imageUploadMode === 'single'
+      ? ['jewelry', 'model']
+      : ['model', 'ring', 'necklace', 'bangle', 'earring', 'other'];
+
+    // For sketch and CAD modes, use specific categories instead of 'other'
+    const defaultCategory = mode === 'sketch' ? 'sketch' : mode === 'cad' ? 'cad' : (imageUploadMode === 'single' ? 'jewelry' : null);
+
+    // Reject files that would exceed the 6-slot limit
+    const availableSlots = 6 - uploadedImages.length;
+    const filesToAdd = files.slice(0, availableSlots);
+
+    if (files.length > availableSlots) {
+      toast.error(`Only first ${availableSlots} images accepted (Limit: 6)`);
+    }
+
+    const newImgs = filesToAdd.map((f) => ({
       id: `${f.name}-${Date.now()}-${Math.random()}`,
       url: URL.createObjectURL(f),
       name: f.name,
-      category: (uploadSlotIndex !== null && uploadSlotIndex < categoryMapping.length) 
-        ? categoryMapping[uploadSlotIndex] 
+      category: (uploadSlotIndex !== null && uploadSlotIndex < categoryMapping.length)
+        ? categoryMapping[uploadSlotIndex]
         : defaultCategory,
     }));
 
@@ -95,9 +190,35 @@ export default function PromptInput({
       onImagesChange?.(updated);
       setUploadSlotIndex(null);
     } else {
-      onImagesChange?.([...uploadedImages, ...newImgs]);
+      const updated = [...uploadedImages, ...newImgs];
+      onImagesChange?.(updated);
     }
+  };
+
+  const handleFileChange = (e) => {
+    handleFilesDrop(e.target.files);
     e.target.value = '';
+  };
+
+  const handlePremadeModelSelect = (pmModel) => {
+    const newImg = {
+      id: `premade-${pmModel.id}-${Date.now()}`,
+      url: pmModel.url,
+      name: pmModel.name,
+      category: 'model',
+      isPremade: true
+    };
+
+    // Replace existing model if any, otherwise prepend
+    const existingModelIndex = uploadedImages.findIndex(img => img.category === 'model');
+    let updated;
+    if (existingModelIndex !== -1) {
+      updated = [...uploadedImages];
+      updated[existingModelIndex] = newImg;
+    } else {
+      updated = [newImg, ...uploadedImages];
+    }
+    onImagesChange?.(updated);
   };
 
   const removeImage = (id) => onImagesChange?.(uploadedImages.filter((img) => img.id !== id));
@@ -105,11 +226,31 @@ export default function PromptInput({
   const openLightbox = (index) => { setLightboxIndex(index); setLightboxOpen(true); };
 
   const openImageGuidance = (event) => {
-    setGuidanceAnchorEl(event.currentTarget);
+    // For sketch and CAD modes, skip Reference Studio and just open file input directly
+    if (mode === 'sketch' || mode === 'cad') {
+      setTimeout(() => fileInputRef.current?.click(), 0);
+    } else {
+      setGuidanceOpen(true);
+    }
   };
 
   const closeImageGuidance = () => {
-    setGuidanceAnchorEl(null);
+    setGuidanceOpen(false);
+    onImagesChange?.([]);
+  };
+
+  const handleUpdateMediaCategory = (mediaId, category) => {
+    const updated = uploadedImages.map(img =>
+      img.id === mediaId ? { ...img, category } : img
+    );
+    onImagesChange?.(updated);
+  };
+
+  const handleRemoveMediaCategory = (mediaId) => {
+    const updated = uploadedImages.map(img =>
+      img.id === mediaId ? { ...img, category: null } : img
+    );
+    onImagesChange?.(updated);
   };
 
   const openSelectMediaDialog = (slotIndex = null) => {
@@ -118,7 +259,7 @@ export default function PromptInput({
   };
 
   const handleContinue = () => {
-    closeImageGuidance();
+    setGuidanceOpen(false); // Just close the dialog, keep images for generation
   };
 
   const handlePromptApply = (prompt) => {
@@ -291,77 +432,88 @@ export default function PromptInput({
             )}
             <input ref={fileInputRef} type="file" accept={uploadAccept} multiple style={{ display: 'none' }} onChange={handleFileChange} />
 
-            <Box sx={{ position: 'relative', flex: 1, minHeight: 24, display: 'flex', alignItems: 'center', pt: 0.4 }}>
-              <AnimatePresence mode="wait" initial={false}>
-                {draftValue.length === 0 && (
-                  <motion.span
-                    key={placeholderSuggestions[placeholderIndex]}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.24, ease: 'easeOut' }}
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      color: isDark ? p.textDisabled : 'rgba(68, 64, 80, 0.55)',
-                      fontSize: '0.9rem',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    {placeholderSuggestions[placeholderIndex]}
-                  </motion.span>
-                )}
-              </AnimatePresence>
+            <Box sx={{ position: 'relative', flex: 1, minHeight: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 0.4 }}>
+              {!isPromptlessMode ? (
+                <>
+                  <AnimatePresence mode="wait" initial={false}>
+                    {draftValue.length === 0 && (
+                      <motion.span
+                        key={placeholderSuggestions[placeholderIndex]}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.24, ease: 'easeOut' }}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          color: isDark ? p.textDisabled : 'rgba(68, 64, 80, 0.55)',
+                          fontSize: '0.9rem',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          pointerEvents: 'none',
+                        }}
+                      >
+                        {placeholderSuggestions[placeholderIndex]}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
 
-              <InputBase
-                value={draftValue}
-                onChange={(e) => setDraftValue(e.target.value)}
-                placeholder=""
-                fullWidth
-                multiline
-                maxRows={5}
-                sx={{
-                  color: p.text,
-                  fontSize: '0.9rem',
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: 'rgba(148, 163, 184, 0.55) rgba(148, 163, 184, 0.14)',
-                  '& textarea': {
-                    position: 'relative',
-                    zIndex: 1,
-                    whiteSpace: 'pre-wrap',
-                    overflowWrap: 'anywhere',
-                    wordBreak: 'break-word',
-                    lineHeight: 1.45,
-                    scrollbarWidth: 'thin',
-                    scrollbarColor: 'rgba(148, 163, 184, 0.55) rgba(148, 163, 184, 0.14)',
-                  },
-                  '& textarea::-webkit-scrollbar': { width: 7 },
-                  '& textarea::-webkit-scrollbar-track': {
-                    backgroundColor: 'rgba(148, 163, 184, 0.14)',
-                    borderRadius: 8,
-                  },
-                  '& textarea::-webkit-scrollbar-thumb': {
-                    backgroundColor: 'rgba(148, 163, 184, 0.55)',
-                    borderRadius: 8,
-                  },
-                  '& textarea::-webkit-scrollbar-thumb:hover': {
-                    backgroundColor: 'rgba(148, 163, 184, 0.75)',
-                  },
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && isGenerateEnabled && !isGenerating) {
-                    handleGenerateClick();
-                  }
-                }}
-              />
+                  <InputBase
+                    value={draftValue}
+                    onChange={(e) => setDraftValue(e.target.value)}
+                    placeholder=""
+                    fullWidth
+                    multiline
+                    maxRows={5}
+                    sx={{
+                      color: p.text,
+                      fontSize: '0.9rem',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: 'rgba(148, 163, 184, 0.55) rgba(148, 163, 184, 0.14)',
+                      '& textarea': {
+                        position: 'relative',
+                        zIndex: 1,
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
+                        lineHeight: 1.45,
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: 'rgba(148, 163, 184, 0.55) rgba(148, 163, 184, 0.14)',
+                      },
+                      '& textarea::-webkit-scrollbar': { width: 7 },
+                      '& textarea::-webkit-scrollbar-track': {
+                        backgroundColor: 'rgba(148, 163, 184, 0.14)',
+                        borderRadius: 8,
+                      },
+                      '& textarea::-webkit-scrollbar-thumb': {
+                        backgroundColor: 'rgba(148, 163, 184, 0.55)',
+                        borderRadius: 8,
+                      },
+                      '& textarea::-webkit-scrollbar-thumb:hover': {
+                        backgroundColor: 'rgba(148, 163, 184, 0.75)',
+                      },
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && isGenerateEnabled && !isGenerating) {
+                        handleGenerateClick();
+                      }
+                    }}
+                  />
+                </>
+              ) : (
+                <Typography sx={{ color: p.textSecondary, fontSize: '0.82rem' }}>
+                  {mode === 'sketch'
+                    ? 'Prompt is not required for Sketch. Upload an image and click Generate.'
+                    : 'Prompt is not required for CAD. Upload an image and click Generate.'}
+                </Typography>
+              )}
+
               {/* Action buttons - shown inline when no images and prompt is short */}
               {uploadedImages.length === 0 && !shouldStackActions && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 1 }}>
-                  {renderTemplateButton()}
+                  {!isPromptlessMode && renderTemplateButton()}
                   {renderGenerateButton()}
                 </Box>
               )}
@@ -385,13 +537,13 @@ export default function PromptInput({
               {renderUploadButton()}
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                {renderTemplateButton()}
+                {!isPromptlessMode && renderTemplateButton()}
                 {renderGenerateButton()}
               </Box>
             </Box>
           )}
 
-          {/* Bottom row - only shown when there are uploaded images */}
+          {/* Bottom row (Uploads + Actions) - only shown when there are uploaded images */}
           {uploadedImages.length > 0 && (
             <Box
               sx={{
@@ -406,7 +558,7 @@ export default function PromptInput({
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', minHeight: 40, flex: 1 }}>
                 <AnimatePresence>
-                  {uploadedImages.map((img, i) => (
+                  {uploadedImages.filter(img => ['model', 'ring', 'necklace', 'bangle', 'earring', 'sketch', 'jewelry', 'cad'].includes(img.category)).map((img, i) => (
                     <motion.div
                       key={img.id}
                       initial={{ opacity: 0, scale: 0.7 }}
@@ -453,20 +605,20 @@ export default function PromptInput({
                 {imageUploadMode === 'multi' && uploadedImages.length > 0 && (
                   <Box
                     onClick={() => setCategorizationModalOpen(true)}
-                    sx={{ 
-                      px: 0.75, 
-                      py: 0.25, 
-                      borderRadius: RADIUS.xs, 
-                      border: '1px solid', 
-                      borderColor: COLORS.primaryAlpha[30], 
-                      cursor: 'pointer', 
-                      color: COLORS.primary, 
-                      fontSize: '0.62rem', 
+                    sx={{
+                      px: 0.75,
+                      py: 0.25,
+                      borderRadius: RADIUS.xs,
+                      border: '1px solid',
+                      borderColor: COLORS.primaryAlpha[30],
+                      cursor: 'pointer',
+                      color: COLORS.primary,
+                      fontSize: '0.62rem',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 0.5,
                       bgcolor: COLORS.primaryAlpha[10],
-                      '&:hover': { bgcolor: COLORS.primaryAlpha[18], borderColor: COLORS.primary } 
+                      '&:hover': { bgcolor: COLORS.primaryAlpha[18], borderColor: COLORS.primary }
                     }}
                   >
                     <Settings size={10} />
@@ -476,7 +628,7 @@ export default function PromptInput({
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-                {renderTemplateButton()}
+                {!isPromptlessMode && renderTemplateButton()}
                 {renderGenerateButton()}
               </Box>
             </Box>
@@ -491,20 +643,24 @@ export default function PromptInput({
         initialPrompt={value}
       />
 
-      <Popover
-        open={Boolean(guidanceAnchorEl)}
-        anchorEl={guidanceAnchorEl}
+      <Dialog
+        open={guidanceOpen}
         onClose={closeImageGuidance}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        PaperProps={{
-          sx: {
-            bgcolor: 'transparent', boxShadow: 'none', mt: 1
-          }
-        }}
-        sx={{
-          '& .MuiPaper-root': {
-            borderRadius: RADIUS.lg,
+        maxWidth="lg"
+        fullWidth
+        TransitionComponent={Transition}
+        slotProps={{
+          backdrop: { sx: { backdropFilter: 'blur(12px)', bgcolor: 'rgba(0,0,0,0.4)' } },
+          paper: {
+            sx: {
+              borderRadius: RADIUS.lg,
+              bgcolor: isDark ? '#141414' : '#fff',
+              backgroundImage: 'none',
+              border: '1px solid',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+              overflow: 'hidden',
+            }
           }
         }}
       >
@@ -513,11 +669,17 @@ export default function PromptInput({
           uploadedMedia={uploadedImages}
           onClose={closeImageGuidance}
           onOpenSelectMedia={openSelectMediaDialog}
+          onFilesDrop={handleFilesDrop}
+          onUpdateMediaCategory={handleUpdateMediaCategory}
+          onRemoveMediaCategory={handleRemoveMediaCategory}
+          onDeleteMedia={removeImage}
+          onClearAllMedia={() => onImagesChange?.([])}
           onContinue={handleContinue}
           imageUploadMode={imageUploadMode}
           onImageUploadModeChange={onImageUploadModeChange}
+          onPremadeModelSelect={handlePremadeModelSelect}
         />
-      </Popover>
+      </Dialog>
 
       {/* Lightbox */}
       <ImageLightbox
@@ -535,6 +697,80 @@ export default function PromptInput({
         onUpdateImages={onImagesChange}
       />
       <ConfirmationComponent />
+
+      {/* Full Page Drop Overlay */}
+      <AnimatePresence>
+        {isGlobalDragging && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)',
+              backdropFilter: 'blur(12px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none', // Allow drop to pass through to the listener
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{
+                scale: isOverDropZone ? 1.05 : 1,
+                opacity: 1,
+                borderColor: isOverDropZone ? COLORS.primary : `rgba(115,103,240,0.5)`,
+                backgroundColor: isOverDropZone ? 'rgba(115,103,240,0.15)' : 'rgba(115,103,240,0.05)',
+                boxShadow: isOverDropZone ? `0 0 50px ${COLORS.primaryAlpha[30]}` : 'none'
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsOverDropZone(true);
+              }}
+              onDragLeave={() => setIsOverDropZone(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsGlobalDragging(false);
+                setIsOverDropZone(false);
+                dragCounter.current = 0;
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  handleFilesDrop(e.dataTransfer.files);
+                  // Don't open Reference Studio for sketch and CAD modes - they accept single image directly
+                  if (mode !== 'sketch' && mode !== 'cad') {
+                    setGuidanceOpen(true);
+                  }
+                }
+              }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              style={{
+                textAlign: 'center',
+                padding: '100px 60px',
+                width: 'min(800px, 90%)',
+                borderRadius: RADIUS.xl,
+                border: `4px dashed`,
+                color: COLORS.primary,
+                pointerEvents: 'auto', // Important: Capture events here
+                cursor: 'copy',
+              }}
+            >
+              <UploadCloud size={80} style={{ marginBottom: '20px' }} />
+              <Typography variant="h5" fontWeight={900} sx={{ letterSpacing: -2, mb: 1.5 }}>
+                REFERENCE DROP
+              </Typography>
+              <Typography variant="h6" sx={{ opacity: 0.9, fontWeight: 600 }}>
+                Drop inside this box to accept images
+              </Typography>
+              <Typography sx={{ opacity: 0.6, fontSize: '0.75rem', mt: 1 }}>
+                Drops outside this area will be ignored.
+              </Typography>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

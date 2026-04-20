@@ -18,8 +18,9 @@ import ModelSelectPanel, { IMAGE_MODELS, VIDEO_MODELS } from '@/components/gener
 import ImageEditWorkspace from '@/components/generate/ImageEditWorkspace';
 import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
 import { handleDownloadFile } from '@/utils/globalFunc';
-import { fileFromImageUrl, processSketchImage, processImageDynamicPrompt, processGeminiVideoGenerate, processMultiReferenceJewelry } from '@/utils/processServices';
-import { fileToBase64 } from '@/utils/historyUtils';
+import { fileFromImageUrl, processSketchImage, processImageDynamicPrompt, processGeminiVideoGenerate, processMultiReferenceJewelry, processSyncCadGenerate } from '@/utils/processServices';
+import { fetchAndNormalizeHistory } from '@/utils/historyServices';
+import { GenerationGroupSkeleton } from '@/components/common/SkeletonLoaders';
 import { IconButton, Tooltip, useTheme } from '@mui/material';
 
 
@@ -27,6 +28,7 @@ import { IconButton, Tooltip, useTheme } from '@mui/material';
 const DEFAULT_SETTINGS = {
   dimension: '1:1', count: 1, preset: 'Cinematic', guidance: 7, addToCollection: false,
   videoQuality: '1080p', videoDuration: '5s', videoFps: '30', videoStyle: 'Cinematic', motionStrength: 5,
+  cadImageEnhancement: true, cadMultiView: true, cadEnablePbr: true,
 };
 
 const PANEL_HEIGHT = 'calc(100vh - 24px)';
@@ -36,6 +38,8 @@ const ACTION_CONFIG = {
   image: { prompt: 'Generate a refined image variation based on this reference', mode: 'image' },
   edit: { prompt: 'Edit and enhance this image: ', mode: 'image' },
   video: { prompt: 'Animate this image into a smooth cinematic video', mode: 'video' },
+  cad: { prompt: 'Generate a CAD model based on this reference', mode: 'cad' },
+  sketch: { prompt: 'Convert this image into a detailed sketch', mode: 'sketch' },
 };
 
 export default function GeneratePage() {
@@ -89,24 +93,24 @@ export default function GeneratePage() {
     }
   }, [imageUploadMode]);
 
-  // Fetch history from local API
+  // Fetch history from new Backend API
   useEffect(() => {
     const fetchHistory = async () => {
-      try {
-        const response = await fetch('/api/history');
-        if (response.ok) {
-          const data = await response.json();
-          setHistory(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch history:', error);
+      setIsLoadingHistory(true);
+      const normalizedData = await fetchAndNormalizeHistory();
+      console.log("normalizedData", normalizedData)
+      if (normalizedData.length > 0) {
+        setHistory(normalizedData);
       }
+      setIsLoadingHistory(false);
     };
     fetchHistory();
   }, []);
 
+
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [history, setHistory] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState('');
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -118,29 +122,9 @@ export default function GeneratePage() {
   const [editWorkspaceOpen, setEditWorkspaceOpen] = useState(false);
   const [editSelectedImage, setEditSelectedImage] = useState(null);
   const [editSelectedPrompt, setEditSelectedPrompt] = useState('');
-  const canGenerate = mode === 'sketch' ? uploadedImages.length > 0 : undefined;
+  const canGenerate = (mode === 'sketch' || mode === 'cad') ? uploadedImages.length > 0 : undefined;
   const uploadAccept = mode === 'video' ? 'image/*,video/*' : 'image/*';
 
-  const saveHistory = async (newItem) => {
-    try {
-      // Convert reference image blob URLs to base64 for persistence
-      if (newItem.referenceImages && newItem.referenceImages.length > 0) {
-        newItem.referenceImages = await Promise.all(
-          newItem.referenceImages.map(url => fileToBase64(url))
-        );
-      }
-
-      await fetch('/api/history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newItem),
-      });
-    } catch (error) {
-      console.error('Failed to save to history file:', error);
-    }
-  };
 
   const handleToggleCollection = (colId, images) => {
     setCollections((prev) => prev.map((c) => {
@@ -196,6 +180,7 @@ export default function GeneratePage() {
           id: `reuse-${Date.now()}-${idx}`,
           url,
           name: `ref-reuse-${idx + 1}.jpg`,
+          category: idx === 0 ? 'jewelry' : null, // Assign first image to jewelry slot
         }))
       );
       setMode('image');
@@ -219,11 +204,11 @@ export default function GeneratePage() {
       .then(blob => {
         const file = new File([blob], `ref-${type}.jpg`, { type: blob.type });
         const url = URL.createObjectURL(file);
-        setUploadedImages([{ id: `action-${Date.now()}`, url, name: file.name }]);
+        setUploadedImages([{ id: `action-${Date.now()}`, url, name: file.name, category: 'jewelry' }]);
       })
       .catch(() => {
         // fallback: just use the url directly
-        setUploadedImages([{ id: `action-${Date.now()}`, url: imgSrc, name: `ref-${type}.jpg` }]);
+        setUploadedImages([{ id: `action-${Date.now()}`, url: imgSrc, name: `ref-${type}.jpg`, category: 'jewelry' }]);
       });
     setPrompt(config.prompt);
     setMode(config.mode);
@@ -281,7 +266,7 @@ export default function GeneratePage() {
 
   const handleGenerate = async (promptOverride) => {
     const activePrompt = typeof promptOverride === 'string' ? promptOverride : prompt;
-    const canGenerateNow = mode === 'sketch' ? uploadedImages.length > 0 : Boolean(activePrompt.trim());
+    const canGenerateNow = (mode === 'sketch' || mode === 'cad') ? uploadedImages.length > 0 : Boolean(activePrompt.trim());
     if (!canGenerateNow || isGenerating) return;
 
     if (mode === 'sketch' && uploadedImages.length === 0) {
@@ -318,7 +303,6 @@ export default function GeneratePage() {
           dimension: settings.dimension,
         };
         setHistory((prev) => [newHistoryItem, ...prev]);
-        saveHistory(newHistoryItem);
 
         setPrompt('');
         return;
@@ -353,7 +337,6 @@ export default function GeneratePage() {
           dimension: settings.dimension,
         };
         setHistory((prev) => [newHistoryItem, ...prev]);
-        saveHistory(newHistoryItem);
 
         setPrompt('');
         return;
@@ -408,7 +391,6 @@ export default function GeneratePage() {
             dimension: settings.dimension,
           };
           setHistory((prev) => [newHistoryItem, ...prev]);
-          saveHistory(newHistoryItem);
 
           setPrompt('');
           return;
@@ -438,7 +420,46 @@ export default function GeneratePage() {
           dimension: settings.dimension,
         };
         setHistory((prev) => [newHistoryItem, ...prev]);
-        saveHistory(newHistoryItem);
+
+        setPrompt('');
+        return;
+      }
+
+      if (mode === 'cad') {
+        const sourceImage = uploadedImages[0];
+        if (!sourceImage) {
+          alert('Please upload an image for CAD generation.');
+          return;
+        }
+
+        const file = await fileFromImageUrl(sourceImage.url, sourceImage.name || 'cad-source.png');
+        
+        // Attempt to get uKey and uniqueNo from session
+        const uKey = sessionStorage.getItem('ukey') || 'social_Image'; 
+        const uniqueNo = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const result = await processSyncCadGenerate({
+          file,
+          image_enhancement: settings.cadImageEnhancement ? 'true' : 'false',
+          multi_view: settings.cadMultiView ? 'true' : 'false',
+          enable_pbr: settings.cadEnablePbr ? 'true' : 'false',
+          uKey,
+          uniqueNo,
+        });
+
+        const generatedImageUrl = result.imageUrl || sourceImage.url;
+
+        const newHistoryItem = {
+          id: Date.now(),
+          date: new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+          prompt: activePrompt || 'CAD Generation',
+          images: [generatedImageUrl],
+          referenceImages: uploadedImages.map(img => img.url),
+          tags: ['CAD', settings.cadMultiView ? 'Multi-View' : null, settings.cadEnablePbr ? 'PBR' : null].filter(Boolean),
+          dimension: settings.dimension,
+          meta: { uKey, uniqueNo }
+        };
+        setHistory((prev) => [newHistoryItem, ...prev]);
 
         setPrompt('');
         return;
@@ -459,7 +480,6 @@ export default function GeneratePage() {
           dimension: settings.dimension,
         };
         setHistory((prev) => [newHistoryItem, ...prev]);
-        saveHistory(newHistoryItem);
         setPrompt('');
       }, 2200);
     } catch (error) {
@@ -630,8 +650,12 @@ export default function GeneratePage() {
                 '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.08)', borderRadius: 2 },
               }}
             >
+              {isLoadingHistory && (
+                <GenerationGroupSkeleton count={2} />
+              )}
+
               {/* Empty state */}
-              {history.length === 0 && !isGenerating && (
+              {history.length === 0 && !isGenerating && !isLoadingHistory && (
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: 2 }}>
                     <motion.div animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 2.5, repeat: Infinity }}>

@@ -28,7 +28,16 @@ export const AuthProvider = ({ children }) => {
   const pathname = usePathname();
   const router = useRouter();
   const [isAuthReady, setIsAuthReady] = React.useState(false);
-  const [themeMode, setThemeMode] = React.useState('light');
+  const [themeMode, setThemeMode] = React.useState(() => {
+    // Check if we're in the browser to avoid server-side errors
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme-mode');
+      if (saved) return saved;
+      const attr = document.body?.getAttribute('data-theme');
+      if (attr) return attr;
+    }
+    return 'light'; // Standard default
+  });
 
   const getQueryParams = () => {
     try {
@@ -199,7 +208,7 @@ export const AuthProvider = ({ children }) => {
             width: '28px',
             height: '28px',
             borderRadius: '50%',
-            border: `2px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(17,24,39,0.15)'}`,
+            border: '2px solid rgba(255,255,255,0.18)',
             borderTopColor: '#7367f0',
             animation: 'authSpin 0.8s linear infinite'
           }}

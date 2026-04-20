@@ -17,10 +17,20 @@ export async function POST(request) {
     thirdPartyFormData.append('file', file);
 
     const authHeader = request.headers.get('authorization');
+
+    // Forward session headers like previous API
+    const sessionHeaders = {
+      Yearcode: request.headers.get('yearcode'),
+      Version: request.headers.get('version'),
+      sv: request.headers.get('sv'),
+      sp: request.headers.get('sp'),
+      ukey: request.headers.get('ukey'),
+    };
+
     const response = await fetch(getApiUrl('/process/sketch'), {
       method: 'POST',
       body: thirdPartyFormData,
-      headers: getApiHeaders(authHeader),
+      headers: getApiHeaders(authHeader, sessionHeaders),
     });
 
     if (!response.ok) {
@@ -39,6 +49,7 @@ export async function POST(request) {
     }
 
     const imageBuffer = await response.arrayBuffer();
+
     return new NextResponse(imageBuffer, {
       status: 200,
       headers: {
@@ -46,6 +57,7 @@ export async function POST(request) {
         'Content-Length': imageBuffer.byteLength.toString(),
       },
     });
+
   } catch (error) {
     return NextResponse.json(
       { error: 'Internal server error', details: error.message },
@@ -60,7 +72,8 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers':
+        'Content-Type, Authorization, Yearcode, Version, sv, sp, ukey',
     },
   });
 }

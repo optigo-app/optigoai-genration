@@ -16,6 +16,7 @@ export const getApiHeaders = (authorizationHeader, additionalHeaders = {}) => {
   const headers = {
     ...additionalHeaders,
   };
+  console.log("headers", headers);
 
   if (authorizationHeader) {
     headers['Authorization'] = authorizationHeader;

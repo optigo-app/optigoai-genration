@@ -17,7 +17,7 @@ import Stack from '@mui/material/Stack';
 import Checkbox from '@mui/material/Checkbox';
 import Tooltip from '@mui/material/Tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, Sparkles, Gauge, Timer, ChevronRight, Folder, Plus, Check, X, ChevronDown, Search, HelpCircle, ExternalLink } from 'lucide-react';
+import { RotateCcw, Sparkles, Gauge, Timer, ChevronRight, Folder, Plus, Check, X, ChevronDown, Search, HelpCircle, ExternalLink, Workflow } from 'lucide-react';
 import { IMAGE_MODELS, VIDEO_MODELS } from '@/components/generate/ModelSelectPanel';
 import { COLORS, RADIUS, SHADOWS } from '@/theme/tokens';
 
@@ -173,6 +173,7 @@ export default function GenerateSettingsPanel({ settings, onChange, mode = 'imag
     dimension: '1:1', count: 1, collectionId: null,
     videoQuality: '1080p', videoDuration: '5s', videoFps: '30', motionStrength: 5,
     imageModel: IMAGE_MODELS[0].id, videoModel: VIDEO_MODELS[0].id,
+    cadImageEnhancement: true, cadMultiView: true, cadEnablePbr: true,
   };
 
   const modelKey = isVideo ? 'videoModel' : 'imageModel';
@@ -210,7 +211,27 @@ export default function GenerateSettingsPanel({ settings, onChange, mode = 'imag
 
         {/* Mode-specific sections */}
         <AnimatePresence mode="wait">
-          {isVideo ? (
+          {mode === 'cad' ? (
+            <motion.div key="cad" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <Box>
+                <SectionLabel icon={Workflow}>CAD Settings</SectionLabel>
+                <Stack gap={1}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>Image Enhancement</Typography>
+                    <Checkbox checked={settings.cadImageEnhancement} onChange={(e) => update('cadImageEnhancement', e.target.checked)} size="small" sx={{ p: 0.5, color: COLORS.primary }} />
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>Multi-View</Typography>
+                    <Checkbox checked={settings.cadMultiView} onChange={(e) => update('cadMultiView', e.target.checked)} size="small" sx={{ p: 0.5, color: COLORS.primary }} />
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>Enable PBR</Typography>
+                    <Checkbox checked={settings.cadEnablePbr} onChange={(e) => update('cadEnablePbr', e.target.checked)} size="small" sx={{ p: 0.5, color: COLORS.primary }} />
+                  </Box>
+                </Stack>
+              </Box>
+            </motion.div>
+          ) : isVideo ? (
             <motion.div key="video" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <Box>
                 <SectionLabel>Number of Generations</SectionLabel>

@@ -9,14 +9,13 @@ import Typography from '@mui/material/Typography';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Check, Share2, Download,
-  Expand, Wand2, Video, ImagePlus, MoreHorizontal
+  Expand, Wand2, Video, ImagePlus, MoreHorizontal, Play,
+  BoxIcon, Pencil, Workflow
 } from 'lucide-react';
 import { COLORS, SHADOWS } from '@/theme/tokens';
 import { handleDownloadFile } from '@/utils/globalFunc';
-
-function isVideoSource(src = '') {
-  return /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i.test(src) || src.includes('/videos/');
-}
+import { isVideoSource, isModelSource } from '@/utils/mediaType';
+import useModelViewer from '@/hooks/useModelViewer';
 
 // Shimmer skeleton shown while generating
 export function GeneratingCard({ index = 0, aspectRatio = '1/1', loadingText = 'Generating...' }) {
@@ -140,10 +139,41 @@ function HoverBtn({ title, onClick, children, variant = 'default' }) {
   );
 }
 
-export default function GeneratedImageCard({ src, alt, index = 0, onAction, selected = false, onSelect, onPreview, prompt = '' }) {
+export default function GeneratedImageCard({ src, alt, index = 0, onAction, selected = false, onSelect, onPreview, prompt = '', aspectRatio = '1/1' }) {
   const [hovered, setHovered] = useState(false);
   const isVideo = isVideoSource(src);
+  const isModel = isModelSource(src);
+  const isModelViewerReady = useModelViewer(isModel);
+  const canRunImageActions = !isVideo && !isModel;
   const videoRef = useRef(null);
+  const modelRef = useRef(null);
+  const cardRef = useRef(null);
+  const [isInViewport, setIsInViewport] = useState(false);
+
+  useEffect(() => {
+    if (!isModel || !cardRef.current || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsInViewport(entry.isIntersecting && entry.intersectionRatio >= 0.35),
+      { threshold: [0, 0.35, 0.75] }
+    );
+
+    observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, [isModel]);
+
+  useEffect(() => {
+    if (!isModel || !isModelViewerReady || !modelRef.current) return;
+
+    if (isInViewport) {
+      modelRef.current.setAttribute('auto-rotate', '');
+      modelRef.current.play?.();
+      return;
+    }
+
+    modelRef.current.removeAttribute('auto-rotate');
+    modelRef.current.pause?.();
+  }, [isModel, isModelViewerReady, isInViewport]);
 
   useEffect(() => {
     if (!isVideo || !videoRef.current) return;
@@ -162,6 +192,7 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
 
   return (
     <motion.div
+      ref={cardRef}
       initial={{ opacity: 0, scale: 0.88, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.45, delay: index * 0.08, ease: [0.23, 1, 0.32, 1] }}
@@ -175,13 +206,30 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
           position: 'relative',
           borderRadius: '12px',
           overflow: 'hidden',
+          aspectRatio,
           border: '1.5px solid',
           borderColor: selected ? COLORS.primary : hovered ? COLORS.primaryAlpha[45] : 'rgba(255,255,255,0.07)',
           transition: 'border-color 0.2s, box-shadow 0.2s',
           boxShadow: hovered ? SHADOWS.cardGlow : 'none',
         }}
       >
-        {isVideo ? (
+        {isModel ? (
+          <Box
+            component={isModelViewerReady ? 'model-viewer' : 'div'}
+            ref={isModelViewerReady ? modelRef : null}
+            src={isModelViewerReady ? src : undefined}
+            camera-controls={isModelViewerReady ? true : undefined}
+            interaction-prompt={isModelViewerReady ? 'none' : undefined}
+            disable-pan={isModelViewerReady ? true : undefined}
+            disable-tap={isModelViewerReady ? true : undefined}
+            sx={{
+              width: '100%',
+              height: '100%',
+              display: 'block',
+              bgcolor: '#0b0b0b',
+            }}
+          />
+        ) : isVideo ? (
           <Box
             component="video"
             ref={videoRef}
@@ -192,8 +240,8 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
             preload="metadata"
             sx={{
               width: '100%',
+              height: '100%',
               display: 'block',
-              aspectRatio: '16/9',
               objectFit: 'cover',
             }}
           />
@@ -204,7 +252,9 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
             alt={alt || 'Generated image'}
             sx={{
               width: '100%',
+              height: '100%',
               display: 'block',
+              objectFit: 'cover',
               transition: 'transform 0.4s ease',
               transform: hovered ? 'scale(1.04)' : 'scale(1)',
             }}
@@ -243,13 +293,41 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
           <HoverBtn title="Download" onClick={() => handleDownloadFile(src)}><Download size={14} /></HoverBtn>
         </motion.div>
 
-        {/* ── BOTTOM-LEFT: Upscale ── */}
+        {/* Play icon overlay for videos */}
+        {isVideo && !hovered && (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'rgba(0,0,0,0.2)',
+              zIndex: 2,
+            }}
+          >
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                bgcolor: 'rgba(255,255,255,0.9)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Play size={20} strokeWidth={2.5} fill="#000" color="#000" style={{ marginLeft: 2 }} />
+            </Box>
+          </Box>
+        )}
+
         <motion.div
           animate={{ opacity: hovered ? 1 : 0, scale: hovered ? 1 : 0.8 }}
           transition={{ duration: 0.18, delay: 0.05 }}
           style={{ position: 'absolute', bottom: 8, left: 8, pointerEvents: hovered ? 'auto' : 'none' }}
         >
-          {!isVideo && (
+          {canRunImageActions && (
             <HoverBtn title="Upscale" onClick={() => onAction?.('upscale', src, prompt)}>
               <Expand size={14} />
             </HoverBtn>
@@ -262,9 +340,11 @@ export default function GeneratedImageCard({ src, alt, index = 0, onAction, sele
           transition={{ duration: 0.18, delay: 0.05 }}
           style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4, pointerEvents: hovered ? 'auto' : 'none' }}
         >
-          {!isVideo && <HoverBtn title="Generate Image" onClick={() => onAction?.('image', src, prompt)}><ImagePlus size={14} /></HoverBtn>}
-          {!isVideo && <HoverBtn title="Edit" onClick={() => onAction?.('edit', src, prompt)}><Wand2 size={14} /></HoverBtn>}
-          {!isVideo && <HoverBtn title="Generate Video" onClick={() => onAction?.('video', src, prompt)}><Video size={14} /></HoverBtn>}
+          {canRunImageActions && <HoverBtn title="Generate Image" onClick={() => onAction?.('image', src, prompt)}><ImagePlus size={14} /></HoverBtn>}
+          {canRunImageActions && <HoverBtn title="Generate Sketch" onClick={() => onAction?.('sketch', src, prompt)}><Pencil size={14} /></HoverBtn>}
+          {canRunImageActions && <HoverBtn title="Generate CAD" onClick={() => onAction?.('cad', src, prompt)}><Workflow size={14} /></HoverBtn>}
+          {canRunImageActions && <HoverBtn title="Edit" onClick={() => onAction?.('edit', src, prompt)}><Wand2 size={14} /></HoverBtn>}
+          {canRunImageActions && <HoverBtn title="Generate Video" onClick={() => onAction?.('video', src, prompt)}><Video size={14} /></HoverBtn>}
           <HoverBtn title="More options"><MoreHorizontal size={14} /></HoverBtn>
         </motion.div>
       </Box>

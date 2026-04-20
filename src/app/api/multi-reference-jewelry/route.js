@@ -59,10 +59,19 @@ export async function POST(request) {
 
         console.log("getApiUrl('/multi-reference-jewelry')", getApiUrl('/multi-reference-jewelry'));
         const authHeader = request.headers.get('authorization');
+        // Collect session headers to forward
+        const sessionHeaders = {
+            Yearcode: request.headers.get('yearcode'),
+            Version: request.headers.get('version'),
+            sv: request.headers.get('sv'),
+            sp: request.headers.get('sp'),
+            ukey: request.headers.get('ukey'),
+        };
+
         const response = await fetch(getApiUrl('/multi-reference-jewelry'), {
             method: 'POST',
             body: thirdPartyFormData,
-            headers: getApiHeaders(authHeader),
+            headers: getApiHeaders(authHeader, sessionHeaders),
         });
 
         console.log('response', response);

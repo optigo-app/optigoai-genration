@@ -13,12 +13,28 @@ export function useColorMode() {
 }
 
 export default function ThemeRegistry({ children }) {
-  const [mode, setMode] = useState('light');
+  const [mode, setMode] = useState(() => {
+    // Check if we're in the browser to avoid server-side errors
+    if (typeof window !== 'undefined') {
+      // 1. Try localStorage
+      const saved = localStorage.getItem('theme-mode');
+      if (saved) return saved;
+
+      // 2. Try the body attribute (set by layout.js script)
+      const attr = document.body.getAttribute('data-theme');
+      if (attr) return attr;
+
+      // 3. Fallback to system preference
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light'; // Standard default
+  });
 
   useEffect(() => {
+    // Keep internal state in sync if localStorage changes elsewhere
     const saved = localStorage.getItem('theme-mode');
     if (saved && saved !== mode) setMode(saved);
-  }, []);
+  }, [mode]);
 
   const colorMode = useMemo(() => ({
     mode,

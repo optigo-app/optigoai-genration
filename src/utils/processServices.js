@@ -1,8 +1,10 @@
+import { getHeaders } from '@/app/api/config/config';
+
 export async function processSketchImage(file, authorizationToken) {
   const formData = new FormData();
   formData.append('file', file);
 
-  const headers = {};
+  const headers = getHeaders();
   if (authorizationToken) {
     headers.Authorization = authorizationToken;
   }
@@ -49,7 +51,7 @@ export async function processImageDynamicPrompt({ file, prompt, modelId, authori
   formData.append('file', file);
   formData.append('prompt', prompt);
 
-  const headers = {};
+  const headers = getHeaders();
   if (authorizationToken) {
     headers.Authorization = authorizationToken;
   }
@@ -113,7 +115,7 @@ export async function processGeminiVideoGenerate({ files, prompt, modelId, durat
     formData.append('duration_seconds', String(durationSeconds));
   }
 
-  const headers = {};
+  const headers = getHeaders();
   if (authorizationToken) {
     headers.Authorization = authorizationToken;
   }
@@ -144,6 +146,7 @@ export async function processGeminiVideoGenerate({ files, prompt, modelId, durat
   if (contentType.includes('application/json')) {
     const data = await response.json();
     const videoUrl =
+      data?.data?.[0]?.result?.url ||
       data?.local_video_url ||
       data?.video ||
       data?.url ||
@@ -212,7 +215,7 @@ export async function processMultiReferenceJewelry({
     formData.append('gemini_model', geminiModel);
   }
 
-  const headers = {};
+  const headers = getHeaders();
   if (authorizationToken) {
     headers.Authorization = authorizationToken;
   }
@@ -242,7 +245,17 @@ export async function processMultiReferenceJewelry({
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const data = await response.json();
-    const imageUrl = data?.output_path || data?.image || data?.url || data?.result?.image || data?.result?.url || null;
+    const imageUrl = 
+      data?.glb_file_url ||
+      data?.download_url ||
+      data?.uploaded?.generated?.url ||
+      data?.data?.[0]?.result?.url ||
+      data?.output_path || 
+      data?.image || 
+      data?.url || 
+      data?.result?.image || 
+      data?.result?.url || 
+      null;
     return { type: 'json', data, imageUrl };
   }
 
@@ -251,6 +264,79 @@ export async function processMultiReferenceJewelry({
     type: 'blob',
     blob,
     imageUrl: URL.createObjectURL(blob),
+  };
+}
+
+export async function processSyncCadGenerate({
+  file,
+  image_enhancement = 'true',
+  multi_view = 'true',
+  enable_pbr = 'true',
+  uKey,
+  uniqueNo,
+  authorizationToken,
+}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('image_enhancement', String(image_enhancement));
+  formData.append('multi_view', String(multi_view));
+  formData.append('enable_pbr', String(enable_pbr));
+  formData.append('uKey', uKey || '');
+  formData.append('uniqueNo', uniqueNo || '');
+  formData.append('generatedFolderName', 'Generated');
+  formData.append('referenceFolderName', 'Reference');
+  formData.append('f', 'AI Sync CAD Generate');
+
+  const headers = getHeaders();
+  if (authorizationToken) {
+    headers.Authorization = authorizationToken;
+  }
+
+  const response = await fetch('/api/sync-cad-generate', {
+    method: 'POST',
+    body: formData,
+    headers,
+  });
+
+  if (!response.ok) {
+    let message = 'Failed to generate CAD';
+    try {
+      const errorData = await response.json();
+      if (errorData?.error) {
+        message = errorData.error;
+      }
+    } catch {
+      const errorText = await response.text().catch(() => '');
+      if (errorText) {
+        message = errorText;
+      }
+    }
+    throw new Error(message);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await response.json();
+    const imageUrl = 
+      data?.glb_file_url ||
+      data?.download_url ||
+      data?.uploaded?.generated?.url ||
+      data?.data?.[0]?.result?.url ||
+      data?.output_path || 
+      data?.image || 
+      data?.url || 
+      data?.result?.image || 
+      data?.result?.url || 
+      null;
+    return { type: 'json', data, imageUrl };
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  return {
+    type: 'blob',
+    blob,
+    imageUrl: url + '#.glb',
   };
 }
 
